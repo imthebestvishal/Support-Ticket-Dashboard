@@ -1,0 +1,64 @@
+import express from "express";
+import { google } from "googleapis";
+import { User } from "../models/user.js";
+
+const router = express.Router();
+
+const oauth2Client = new google.auth.OAuth2(
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_SECRET,
+  process.env.GOOGLE_REDIRECT_URI,
+);
+
+router.get("/google", (req, res) => {
+  const redirectUrl = req.query.redirect;
+  if (redirectUrl && redirectUrl.startsWith("http://localhost")) {
+    req.session.redirectAfterAuth = redirectUrl;
+  }
+
+  const authUrl = oauth2Client.generateAuthUrl({
+    access_type: "offline",
+    scope: ["https://www.googleapis.com/auth/gmail.readonly"],
+    prompt: "consent",
+  });
+  res.redirect(authUrl);
+});
+
+router.get("/google/callback", async (req, res) => {
+  const code = req.query.code;
+
+  if (!code) {
+    return res.status(400).send({ error: "Missing code query parameter" });
+  }
+
+  try {
+    const { tokens } = await oauth2Client.getToken(code);
+    oauth2Client.setCredentials(tokens);
+
+    const oauth2 = google.oauth2({ version: "v2", auth: oauth2Client });
+    const userInfo = await oauth2.userinfo.get();
+
+    const user = await User.findOneAndUpdate(
+      { googleId: userInfo.data.id },
+      {
+        googleId: userInfo.data.id,
+        email: userInfo.data.email,
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token,
+        tokenExpiry: tokens.expiry_date,
+      },
+      { upsert: true, new: true },
+    );
+
+    const redirectTarget =
+      req.session.redirectAfterAuth || process.env.FRONTEND_URL || "/";
+    req.session.redirectAfterAuth = undefined;
+    req.session.userId = user._id;
+    res.redirect(redirectTarget);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({ error: "Failed to complete Google OAuth" });
+  }
+});
+
+export { router as authRouter };
