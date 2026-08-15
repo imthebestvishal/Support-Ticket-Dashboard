@@ -1,7 +1,7 @@
 ﻿import { useEffect, useState } from "react";
 import Sidebar from "../components/Sidebar";
 
-const BACKEND = "http://localhost:5000";
+const BACKEND = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 type GmailAnalysis = {
   category?: string;
@@ -251,6 +251,7 @@ export default function Gmail() {
     </div>
   );
 }
+
 
 
 
