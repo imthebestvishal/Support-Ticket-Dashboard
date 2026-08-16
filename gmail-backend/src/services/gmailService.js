@@ -331,32 +331,55 @@ export async function fetchAndAnalyzeMessages(userId) {
 
   const gmail = await getGmailClient(user);
 
-  console.log("STEP 1: Calling Gmail messages.list...");
+  console.log("STEP 1: Fetching Gmail inbox messages...");
 
-  const listResponse =
-    await Promise.race([
-      gmail.users.messages.list({
-        userId: "me",
-        q: "in:inbox from:shmehta109@gmail.com",
-        maxResults: 20,
-      }),
-      new Promise((_, reject) =>
-        setTimeout(
-          () => reject(new Error("Gmail messages.list timed out after 20 seconds")),
-          20000
-        )
-      ),
-    ]);
+  const gmailMessages = [];
 
-  console.log("STEP 2: Gmail messages.list completed.");
+  let pageToken = undefined;
+  let pageNumber = 1;
 
-  const gmailMessages =
-    listResponse.data.messages || [];
+  do {
+    console.log(`Fetching Gmail page ${pageNumber}...`);
 
-  console.log(`STEP 2: Gmail API returned ${gmailMessages.length} messages.`);
+    const listResponse =
+      await Promise.race([
+        gmail.users.messages.list({
+          userId: "me",
+          q: "in:inbox",
+          maxResults: 100,
+          pageToken: pageToken,
+        }),
+        new Promise((_, reject) =>
+          setTimeout(
+            () =>
+              reject(
+                new Error(
+                  "Gmail messages.list timed out after 20 seconds"
+                )
+              ),
+            20000
+          )
+        ),
+      ]);
+
+    const pageMessages =
+      listResponse.data.messages || [];
+
+    gmailMessages.push(...pageMessages);
+
+    console.log(
+      `Page ${pageNumber}: ${pageMessages.length} messages`
+    );
+
+    pageToken =
+      listResponse.data.nextPageToken;
+
+    pageNumber++;
+
+  } while (pageToken);
 
   console.log(
-    `Gmail returned ${gmailMessages.length} inbox messages`
+    `STEP 2: Gmail API returned ${gmailMessages.length} total inbox messages.`
   );
 
   const results = [];
@@ -393,12 +416,76 @@ export async function fetchAndAnalyzeMessages(userId) {
 
       console.log("STEP 3: Starting AI analysis...");
 
-      const analysis =
-        await analyzeMessage(
+      let analysis;
+
+      try {
+        analysis = await analyzeMessage(
           subject,
           body,
           sender
         );
+
+        console.log(
+          `AI result: ${JSON.stringify(analysis)}`
+        );
+
+      } catch (aiError) {
+        console.error(
+          "Gemini analysis failed:",
+          aiError.message
+        );
+
+        console.log(
+          "Using fallback analysis for this email."
+        );
+
+        const text =
+          `${subject} ${body}`.toLowerCase();
+
+        let category = "General";
+
+        if (
+          text.includes("bill") ||
+          text.includes("billing") ||
+          text.includes("invoice") ||
+          text.includes("payment") ||
+          text.includes("refund") ||
+          text.includes("charged")
+        ) {
+          category = "Billing";
+        } else if (
+          text.includes("login") ||
+          text.includes("log in") ||
+          text.includes("password") ||
+          text.includes("account") ||
+          text.includes("access")
+        ) {
+          category = "Account";
+        } else if (
+          text.includes("error") ||
+          text.includes("bug") ||
+          text.includes("technical") ||
+          text.includes("not working") ||
+          text.includes("website") ||
+          text.includes("system")
+        ) {
+          category = "Technical";
+        }
+
+        analysis = {
+          category: category,
+          priority: calculatePriority(subject, body, ""),
+          summary: subject || "Customer support request",
+          sentiment: "Neutral",
+          suggestedResponse:
+            "Thank you for contacting support. We have received your request and will review it shortly.",
+          isTicket: true
+        };
+
+        console.log(
+          `Fallback result: ${JSON.stringify(analysis)}`
+        );
+      }
 
       const calculatedPriority =
         calculatePriority(
@@ -409,11 +496,6 @@ export async function fetchAndAnalyzeMessages(userId) {
 
       analysis.priority =
         calculatedPriority;
-
-
-      console.log(
-        `AI result: ${JSON.stringify(analysis)}`
-      );
 
       const savedMessage =
         await Message.findOneAndUpdate(
@@ -474,6 +556,9 @@ export async function fetchAndAnalyzeMessages(userId) {
 
   return results;
 }
+
+
+
 
 
 

@@ -101,24 +101,27 @@ router.get("/google/callback", async (req, res) => {
     // ===============================
     // SAVE USER
     // ===============================
+    const updateData = {
+      googleId: email,
+      email: email,
+      accessToken: tokens.access_token,
+      tokenExpiry: tokens.expiry_date
+    };
+
+    if (tokens.refresh_token) {
+      updateData.refreshToken = tokens.refresh_token;
+    }
+
     const user =
       await User.findOneAndUpdate(
-        { googleId: email },
         {
-          googleId: email,
-          email: email,
-          accessToken:
-            tokens.access_token,
-
-          ...(tokens.refresh_token
-            ? {
-                refreshToken:
-                  tokens.refresh_token
-              }
-            : {}),
-
-          tokenExpiry:
-            tokens.expiry_date
+          $or: [
+            { googleId: email },
+            { email: email }
+          ]
+        },
+        {
+          $set: updateData
         },
         {
           upsert: true,
@@ -194,3 +197,4 @@ router.get("/google/callback", async (req, res) => {
 });
 
 export { router as authRouter };
+
