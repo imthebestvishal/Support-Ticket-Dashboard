@@ -1,24 +1,13 @@
+import mongoose from "mongoose";
 import { Message } from "../models/message.js";
+import { listMemoryMessages } from "./memoryStore.js";
+import {
+  askOpenRouter,
+  getOpenRouterModel,
+  isOpenRouterConfigured,
+} from "./openRouterService.js";
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-
-async function askGemini(prompt) {
-  if (!GEMINI_API_KEY) {
-    throw new Error("GEMINI_API_KEY is not configured");
-  }
-
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        systemInstruction: {
-          parts: [
-            {
-              text: `
+const assistantSystemPrompt = `
 You are SupportHub AI, an expert customer-support assistant.
 
 Your job is to help a support agent analyze and respond to customer support tickets.
@@ -60,71 +49,84 @@ For analytics questions:
 For summaries:
 - Highlight the most important issues first.
 - Mention urgent/high-priority tickets separately when relevant.
-`
-            }
-          ]
-        },
-        contents: [
-          {
-            parts: [
-              {
-                text: prompt,
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.2,
-          maxOutputTokens: 1200,
-        },
-      }),
-    }
+`;
+
+function formatTicket(message, index) {
+  return `${index + 1}. ${message.subject || "No subject"}\n   Customer: ${message.sender || "Unknown"}\n   Priority: ${message.priority || "Medium"}\n   Status: ${message.status || "Open"}\n   Summary: ${message.summary || "No summary available"}`;
+}
+
+function buildLocalAnswer(messages, question) {
+  const lowerQuestion = question.toLowerCase();
+
+  if (!messages.length) {
+    return "No support tickets are available yet. Fetch and analyze Gmail messages first, then I can summarize, count, prioritize, or draft responses from that ticket data.";
+  }
+
+  const activeMessages = messages.filter(
+    (message) => !message.deletedAt
   );
 
-  if (!response.ok) {
-    const errorText = await response.text();
+  const highPriority = activeMessages.filter(
+    (message) =>
+      message.priority === "High" ||
+      message.priority === "Urgent"
+  );
 
-    if (response.status === 429) {
-      throw new Error(
-        "Gemini quota has been temporarily exhausted. Please try again after the quota resets."
-      );
-    }
+  const openTickets = activeMessages.filter(
+    (message) => message.status !== "Resolved"
+  );
 
-    if (response.status === 401 || response.status === 403) {
-      throw new Error(
-        "Gemini API key is invalid or does not have permission to use this API."
-      );
-    }
-
-    throw new Error(
-      `Gemini API error ${response.status}: ${errorText}`
-    );
+  if (
+    lowerQuestion.includes("count") ||
+    lowerQuestion.includes("how many") ||
+    lowerQuestion.includes("total")
+  ) {
+    return `There are ${activeMessages.length} active tickets.\n\nOpen: ${openTickets.length}\nHigh priority: ${highPriority.length}\nResolved: ${activeMessages.length - openTickets.length}`;
   }
 
-  const data = await response.json();
+  if (
+    lowerQuestion.includes("urgent") ||
+    lowerQuestion.includes("priority") ||
+    lowerQuestion.includes("important")
+  ) {
+    if (!highPriority.length) {
+      return "There are no high-priority or urgent tickets in the available ticket data.";
+    }
 
-  const text =
-    data?.candidates?.[0]?.content?.parts
-      ?.map((part) => part.text || "")
-      .join("")
-      .trim();
-
-  if (!text) {
-    throw new Error("Gemini returned an empty response");
+    return `High-priority tickets:\n\n${highPriority
+      .map(formatTicket)
+      .join("\n\n")}`;
   }
 
-  return text;
+  if (
+    lowerQuestion.includes("draft") ||
+    lowerQuestion.includes("reply") ||
+    lowerQuestion.includes("response")
+  ) {
+    const target =
+      highPriority[0] || activeMessages[0];
+
+    return `Subject: Re: ${target.subject || "Your support request"}\n\nHi,\n\nThank you for contacting us. We understand your concern about "${target.subject || "your request"}".\n\nBased on the available ticket information, our team has received your message and will review it carefully. We will follow up with the next available update as soon as possible.\n\nBest regards,\nSupport Team`;
+  }
+
+  return `Here is a summary of the latest available tickets:\n\n${activeMessages
+    .slice(0, 8)
+    .map(formatTicket)
+    .join("\n\n")}\n\nNote: OpenRouter is not configured yet, so this is a local rule-based assistant response. Add a real OPENROUTER_API_KEY for richer AI answers.`;
 }
 
 export async function askAssistant(userId, question) {
-  const messages = await Message.find({
-    userId,
-  })
-    .sort({
-      receivedAt: -1,
-    })
-    .limit(30)
-    .lean();
+  const messages =
+    mongoose.connection.readyState === 1
+      ? await Message.find({
+          userId,
+        })
+          .sort({
+            receivedAt: -1,
+          })
+          .limit(30)
+          .lean()
+      : listMemoryMessages(userId.toString()).slice(0, 30);
 
   const ticketContext = messages.length
     ? messages
@@ -191,10 +193,42 @@ If the requested information does not exist in the data, say:
 Do not make up missing information.
 `;
 
-  const answer = await askGemini(prompt);
+  if (!isOpenRouterConfigured()) {
+    return {
+      answer: buildLocalAnswer(messages, question),
+      ticketCount: messages.length,
+      source: "local-fallback",
+    };
+  }
 
-  return {
-    answer,
-    ticketCount: messages.length,
-  };
+  try {
+    const answer = await askOpenRouter({
+      messages: [
+        {
+          role: "system",
+          content: assistantSystemPrompt,
+        },
+        {
+          role: "user",
+          content: prompt,
+        },
+      ],
+      temperature: 0.2,
+      maxTokens: 1200,
+    });
+
+    return {
+      answer,
+      ticketCount: messages.length,
+      source: "openrouter",
+      model: getOpenRouterModel(),
+    };
+  } catch (error) {
+    console.warn(
+      "OpenRouter assistant unavailable.",
+      error.message
+    );
+
+    throw error;
+  }
 }

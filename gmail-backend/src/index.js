@@ -10,6 +10,20 @@ import { authRouter } from "./routes/auth.js";
 import { apiRouter } from "./routes/api.js";
 
 dotenv.config();
+mongoose.set("bufferCommands", false);
+
+for (const key of [
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "ALL_PROXY",
+  "http_proxy",
+  "https_proxy",
+  "all_proxy",
+]) {
+  if (process.env[key]?.includes("127.0.0.1:9")) {
+    delete process.env[key];
+  }
+}
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -62,12 +76,16 @@ mongoose
   .connect(process.env.MONGO_URI, {
     useNewUrlParser: true,
     useUnifiedTopology: true,
+    serverSelectionTimeoutMS: 3000,
   })
   .then(() => {
     console.log("MongoDB connected");
   })
   .catch((error) => {
-    console.error("MongoDB connection error:", error);
+    console.warn(
+      "MongoDB unavailable; using in-memory storage for this local session.",
+      error.message
+    );
   });
 
 app.use("/auth", authRouter);

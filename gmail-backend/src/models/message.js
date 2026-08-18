@@ -73,6 +73,17 @@ const messageSchema = new mongoose.Schema(
       enum: ["Open", "In Progress", "Resolved"],
       default: "Open",
     },
+
+    deletedAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
+
+    expiresAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,

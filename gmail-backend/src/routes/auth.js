@@ -1,7 +1,9 @@
 ﻿import express from "express";
 import dotenv from "dotenv";
 import { google } from "googleapis";
+import mongoose from "mongoose";
 import { User } from "../models/user.js";
+import { saveMemoryUser } from "../services/memoryStore.js";
 
 dotenv.config();
 
@@ -30,7 +32,8 @@ router.get("/google", (req, res) => {
     access_type: "offline",
 
     scope: [
-      "https://www.googleapis.com/auth/gmail.readonly"
+      "https://www.googleapis.com/auth/gmail.readonly",
+      "https://www.googleapis.com/auth/userinfo.profile"
     ],
 
     prompt: "select_account consent"
@@ -98,12 +101,23 @@ router.get("/google/callback", async (req, res) => {
       email
     );
 
+    const oauth2 =
+      google.oauth2({
+        version: "v2",
+        auth: oauth2Client
+      });
+
+    const userInfo =
+      await oauth2.userinfo.get();
+
     // ===============================
     // SAVE USER
     // ===============================
     const updateData = {
       googleId: email,
       email: email,
+      picture: userInfo.data.picture || "",
+      name: userInfo.data.name || "",
       accessToken: tokens.access_token,
       tokenExpiry: tokens.expiry_date
     };
@@ -113,21 +127,23 @@ router.get("/google/callback", async (req, res) => {
     }
 
     const user =
-      await User.findOneAndUpdate(
-        {
-          $or: [
-            { googleId: email },
-            { email: email }
-          ]
-        },
-        {
-          $set: updateData
-        },
-        {
-          upsert: true,
-          new: true
-        }
-      );
+      mongoose.connection.readyState === 1
+        ? await User.findOneAndUpdate(
+            {
+              $or: [
+                { googleId: email },
+                { email: email }
+              ]
+            },
+            {
+              $set: updateData
+            },
+            {
+              upsert: true,
+              new: true
+            }
+          )
+        : saveMemoryUser(updateData);
 
     // ===============================
     // SAVE SESSION

@@ -1,9 +1,10 @@
 ﻿import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { authClient } from "../lib/auth";
 
 export default function Auth() {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [view, setView] = useState<"signin" | "signup">("signin");
   const [name, setName] = useState("");
@@ -15,12 +16,22 @@ export default function Auth() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    const mode = new URLSearchParams(location.search).get("mode");
+
+    if (mode === "signup" || mode === "signin") {
+      setView(mode);
+      setError("");
+      setMessage("");
+    }
+  }, [location.search]);
+
+  useEffect(() => {
     const checkSession = async () => {
       try {
         const result = await authClient.getSession();
 
         if (result?.data?.session) {
-          navigate("/account", { replace: true });
+          navigate("/dashboard", { replace: true });
         }
       } catch (err) {
         console.error("Session check failed:", err);
@@ -57,6 +68,7 @@ export default function Auth() {
 
         setView("signin");
         setPassword("");
+        navigate("/auth?mode=signin", { replace: true });
       } else {
         const result = await authClient.signIn.email({
           email,
@@ -69,7 +81,7 @@ export default function Auth() {
 
         setMessage("Signed in successfully.");
 
-        navigate("/account", { replace: true });
+        navigate("/dashboard", { replace: true });
       }
     } catch (err: any) {
       console.error("Authentication error:", err);
@@ -104,7 +116,12 @@ export default function Auth() {
 
       <div className="auth-card-grid">
         <div className="auth-card">
-          <div className="action-row">
+          <div
+            className={`action-row auth-toggle-row ${
+              view === "signup" ? "is-signup" : "is-signin"
+            }`}
+          >
+            <span className="action-row-indicator" aria-hidden="true" />
             <button
               type="button"
               onClick={() => {

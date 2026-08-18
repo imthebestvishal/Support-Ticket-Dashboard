@@ -1,6 +1,12 @@
 ﻿import { google } from "googleapis";
 import { User } from "../models/user.js";
+import mongoose from "mongoose";
 import { Message } from "../models/message.js";
+import {
+  getMemoryUser,
+  saveMemoryMessage,
+} from "./memoryStore.js";
+import { askOpenRouter } from "./openRouterService.js";
 
 function calculatePriority(subject = "", body = "", sentiment = "") {
   const text = `${subject} ${body}`.toLowerCase();
@@ -90,13 +96,11 @@ function calculatePriority(subject = "", body = "", sentiment = "") {
   return "Low";
 }
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GMAIL_FETCH_LIMIT = Number(
+  process.env.GMAIL_FETCH_LIMIT || 25
+);
 
 async function analyzeMessage(subject, body, sender) {
-  if (!GEMINI_API_KEY) {
-    throw new Error("GEMINI_API_KEY is not configured");
-  }
-
   const prompt = `
 You are an AI support-ticket analyzer.
 
@@ -137,47 +141,22 @@ technical issue, or action that requires attention.
 Keep summary short.
 `;
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+  const text = await askOpenRouter({
+    messages: [
+      {
+        role: "system",
+        content:
+          "You analyze customer support emails. Return only valid JSON and do not include markdown.",
       },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              {
-                text: prompt,
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.2,
-          responseMimeType: "application/json",
-        },
-      }),
-    }
-  );
-
-  if (!response.ok) {
-    const errorText = await response.text();
-
-    throw new Error(
-      `Gemini API error ${response.status}: ${errorText}`
-    );
-  }
-
-  const data = await response.json();
-
-  const text =
-    data?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-  if (!text) {
-    throw new Error("Gemini returned an empty response");
-  }
+      {
+        role: "user",
+        content: prompt,
+      },
+    ],
+    temperature: 0.2,
+    maxTokens: 900,
+    json: true,
+  });
 
   try {
     const parsed = JSON.parse(text);
@@ -197,7 +176,7 @@ Keep summary short.
     };
   } catch (error) {
     console.error(
-      "Gemini returned invalid JSON:",
+      "OpenRouter returned invalid JSON:",
       text
     );
 
@@ -317,7 +296,10 @@ function getHeader(headers, name) {
 */
 
 export async function fetchAndAnalyzeMessages(userId) {
-  const user = await User.findById(userId);
+  const user =
+    mongoose.connection.readyState === 1
+      ? await User.findById(userId)
+      : getMemoryUser(userId.toString());
 
   if (!user) {
     throw new Error("User not found");
@@ -333,53 +315,34 @@ export async function fetchAndAnalyzeMessages(userId) {
 
   console.log("STEP 1: Fetching Gmail inbox messages...");
 
-  const gmailMessages = [];
-
-  let pageToken = undefined;
-  let pageNumber = 1;
-
-  do {
-    console.log(`Fetching Gmail page ${pageNumber}...`);
-
-    const listResponse =
-      await Promise.race([
-        gmail.users.messages.list({
-          userId: "me",
-          q: "in:inbox",
-          maxResults: 100,
-          pageToken: pageToken,
-        }),
-        new Promise((_, reject) =>
-          setTimeout(
-            () =>
-              reject(
-                new Error(
-                  "Gmail messages.list timed out after 20 seconds"
-                )
-              ),
-            20000
-          )
+  const listResponse =
+    await Promise.race([
+      gmail.users.messages.list({
+        userId: "me",
+        q: "in:inbox newer_than:30d",
+        maxResults: Math.min(
+          Math.max(GMAIL_FETCH_LIMIT, 1),
+          100
         ),
-      ]);
+      }),
+      new Promise((_, reject) =>
+        setTimeout(
+          () =>
+            reject(
+              new Error(
+                "Gmail messages.list timed out after 20 seconds"
+              )
+            ),
+          20000
+        )
+      ),
+    ]);
 
-    const pageMessages =
-      listResponse.data.messages || [];
-
-    gmailMessages.push(...pageMessages);
-
-    console.log(
-      `Page ${pageNumber}: ${pageMessages.length} messages`
-    );
-
-    pageToken =
-      listResponse.data.nextPageToken;
-
-    pageNumber++;
-
-  } while (pageToken);
+  const gmailMessages =
+    listResponse.data.messages || [];
 
   console.log(
-    `STEP 2: Gmail API returned ${gmailMessages.length} total inbox messages.`
+    `STEP 2: Gmail API returned ${gmailMessages.length} recent inbox messages.`
   );
 
   const results = [];
@@ -431,7 +394,7 @@ export async function fetchAndAnalyzeMessages(userId) {
 
       } catch (aiError) {
         console.error(
-          "Gemini analysis failed:",
+          "OpenRouter analysis failed:",
           aiError.message
         );
 
@@ -497,48 +460,56 @@ export async function fetchAndAnalyzeMessages(userId) {
       analysis.priority =
         calculatedPriority;
 
+      const messageData = {
+        gmailMessageId: message.id,
+        userId,
+        sender,
+        subject,
+        body,
+        receivedAt: date
+          ? new Date(date)
+          : new Date(),
+
+        category:
+          analysis.category,
+
+        priority:
+          analysis.priority,
+
+        summary:
+          analysis.summary,
+
+        sentiment:
+          analysis.sentiment,
+
+        suggestedResponse:
+          analysis.suggestedResponse,
+
+        isTicket:
+          analysis.isTicket,
+
+        status: "Open",
+      };
+
       const savedMessage =
-        await Message.findOneAndUpdate(
-          {
-            gmailMessageId: message.id,
-            userId,
-          },
-          {
-            gmailMessageId: message.id,
-            userId,
-            sender,
-            subject,
-            body,
-            receivedAt: date
-              ? new Date(date)
-              : new Date(),
-
-            category:
-              analysis.category,
-
-            priority:
-              analysis.priority,
-
-            summary:
-              analysis.summary,
-
-            sentiment:
-              analysis.sentiment,
-
-            suggestedResponse:
-              analysis.suggestedResponse,
-
-            isTicket:
-              analysis.isTicket,
-
-            status: "Open",
-          },
-          {
-            upsert: true,
-            new: true,
-            setDefaultsOnInsert: true,
-          }
-        );
+        mongoose.connection.readyState === 1
+          ? await Message.findOneAndUpdate(
+              {
+                gmailMessageId: message.id,
+                userId,
+              },
+              messageData,
+              {
+                upsert: true,
+                new: true,
+                setDefaultsOnInsert: true,
+              }
+            )
+          : saveMemoryMessage(
+              userId.toString(),
+              message.id,
+              messageData
+            );
 
       results.push(savedMessage);
 
