@@ -923,7 +923,16 @@ button:disabled {
 }
 
 .reply-draft-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
   color: #ef4444;
+}
+
+.reply-draft-error p {
+  margin: 0;
 }
 
 .reply-draft-success {

@@ -2133,9 +2133,20 @@ function Workspace() {
                                 />
 
                                 {replyState.error && (
-                                  <p className="reply-draft-error">
-                                    {replyState.error}
-                                  </p>
+                                  <div className="reply-draft-error">
+                                    <p>{replyState.error}</p>
+                                    {replyState.error
+                                      .toLowerCase()
+                                      .includes("reconnect gmail") && (
+                                      <button
+                                        className="outline-button compact-action"
+                                        onClick={connectGmail}
+                                        disabled={replyState.sending}
+                                      >
+                                        Reconnect Gmail
+                                      </button>
+                                    )}
+                                  </div>
                                 )}
 
                                 {replyState.success && (

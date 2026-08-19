@@ -73,6 +73,25 @@ function buildRawReply({ to, from, subject, body }) {
   return encodeBase64Url(`${headers.join("\r\n")}\r\n\r\n${body}`);
 }
 
+function isGmailPermissionError(error) {
+  const text = [
+    error?.message,
+    error?.response?.data?.error,
+    error?.response?.data?.error_description,
+    JSON.stringify(error?.errors || []),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return (
+    text.includes("insufficient") ||
+    text.includes("permission") ||
+    text.includes("forbidden") ||
+    text.includes("scope")
+  );
+}
+
 function normalizedValue(value, allowed, fallback) {
   return allowed.includes(value) ? value : fallback;
 }
@@ -611,17 +630,29 @@ export async function sendReplyEmail({ user, message, replyBody }) {
     body: replyBody.trim(),
   });
 
-  const response = await gmail.users.messages.send({
-    userId: "me",
-    requestBody: {
-      raw,
-      ...(message.gmailThreadId
-        ? {
-            threadId: message.gmailThreadId,
-          }
-        : {}),
-    },
-  });
+  let response;
+
+  try {
+    response = await gmail.users.messages.send({
+      userId: "me",
+      requestBody: {
+        raw,
+        ...(message.gmailThreadId
+          ? {
+              threadId: message.gmailThreadId,
+            }
+          : {}),
+      },
+    });
+  } catch (error) {
+    if (isGmailPermissionError(error)) {
+      throw new Error(
+        "Gmail needs send permission. Please reconnect Gmail, approve the send permission, then try again."
+      );
+    }
+
+    throw error;
+  }
 
   return response.data;
 }
