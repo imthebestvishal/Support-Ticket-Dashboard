@@ -28,6 +28,9 @@ for (const key of [
 
 const app = express();
 const port = process.env.PORT || 5000;
+const isProduction = process.env.NODE_ENV === "production";
+
+app.set("trust proxy", 1);
 
 const allowedOrigins = [
   process.env.FRONTEND_URL,
@@ -53,8 +56,8 @@ app.use(morgan("dev"));
  * The frontend runs on localhost:5173
  * The backend runs on localhost:5000
  *
- * sameSite: "lax" allows the session cookie to survive
- * the Google OAuth redirect back to our application.
+ * In production the frontend and backend run on different domains
+ * (Vercel + Render), so cookies must be allowed in cross-site requests.
  */
 app.use(
   session({
@@ -69,8 +72,8 @@ app.use(
 
     cookie: {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax",
       maxAge: 24 * 60 * 60 * 1000,
     },
   }),
