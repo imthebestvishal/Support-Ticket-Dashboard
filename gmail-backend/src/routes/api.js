@@ -3,7 +3,11 @@ import crypto from "crypto";
 import { User } from "../models/user.js";
 import mongoose from "mongoose";
 import { Message } from "../models/message.js";
-import { fetchAndAnalyzeMessages } from "../services/gmailService.js";
+import {
+  fetchAndAnalyzeMessages,
+  generateReplyDraft,
+  sendReplyEmail,
+} from "../services/gmailService.js";
 import { askAssistant } from "../services/assistantService.js";
 import {
   getMemoryUser,
@@ -11,6 +15,7 @@ import {
   listMemoryTrash,
   permanentlyDeleteMemoryMessage,
   restoreMemoryMessage,
+  updateMemoryMessage,
   softDeleteAllMemoryMessages,
   softDeleteMemoryMessage,
 } from "../services/memoryStore.js";
@@ -354,6 +359,128 @@ router.post("/messages/fetch", requireAuth, async (req, res) => {
 
     res.status(500).send({
       error: error.message || "Failed to fetch Gmail messages",
+    });
+  }
+});
+
+router.post("/messages/:id/draft-reply", requireAuth, async (req, res) => {
+  try {
+    const message =
+      mongoose.connection.readyState === 1
+        ? await Message.findOne(messageQuery(req.user._id, req.params.id))
+        : updateMemoryMessage(req.user._id.toString(), req.params.id, {});
+
+    if (!message || message.deletedAt) {
+      return res.status(404).send({
+        error: "Message not found",
+      });
+    }
+
+    if (!message.gmailMessageId) {
+      return res.status(400).send({
+        error: "Reply drafts are only available for Gmail-backed tickets.",
+      });
+    }
+
+    const draft = await generateReplyDraft(message);
+
+    const updatedMessage =
+      mongoose.connection.readyState === 1
+        ? await Message.findOneAndUpdate(
+            messageQuery(req.user._id, req.params.id),
+            {
+              $set: {
+                replyDraft: draft,
+              },
+            },
+            {
+              new: true,
+            }
+          )
+        : updateMemoryMessage(req.user._id.toString(), req.params.id, {
+            replyDraft: draft,
+          });
+
+    res.send({
+      draft,
+      message: updatedMessage,
+    });
+  } catch (error) {
+    console.error("Failed to generate reply draft:", error);
+
+    res.status(500).send({
+      error: error.message || "Failed to generate reply draft",
+    });
+  }
+});
+
+router.post("/messages/:id/send-reply", requireAuth, async (req, res) => {
+  try {
+    const replyBody = String(req.body?.replyBody || "").trim();
+
+    if (!replyBody) {
+      return res.status(400).send({
+        error: "Reply body is required",
+      });
+    }
+
+    const message =
+      mongoose.connection.readyState === 1
+        ? await Message.findOne(messageQuery(req.user._id, req.params.id))
+        : updateMemoryMessage(req.user._id.toString(), req.params.id, {});
+
+    if (!message || message.deletedAt) {
+      return res.status(404).send({
+        error: "Message not found",
+      });
+    }
+
+    if (!message.gmailMessageId) {
+      return res.status(400).send({
+        error: "Replies can only be sent for Gmail-backed tickets.",
+      });
+    }
+
+    const sentMessage = await sendReplyEmail({
+      user: req.user,
+      message,
+      replyBody,
+    });
+
+    const updates = {
+      replyDraft: replyBody,
+      sentReply: replyBody,
+      replySentAt: new Date(),
+      status: "Resolved",
+    };
+
+    const updatedMessage =
+      mongoose.connection.readyState === 1
+        ? await Message.findOneAndUpdate(
+            messageQuery(req.user._id, req.params.id),
+            {
+              $set: updates,
+            },
+            {
+              new: true,
+            }
+          )
+        : updateMemoryMessage(
+            req.user._id.toString(),
+            req.params.id,
+            updates
+          );
+
+    res.send({
+      sent: true,
+      gmailMessageId: sentMessage.id,
+      message: updatedMessage,
+    });
+  } catch (error) {
+    console.error("Failed to send reply:", error);
+
+    res.status(500).send({
+      error: error.message || "Failed to send reply",
     });
   }
 });

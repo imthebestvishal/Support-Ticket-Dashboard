@@ -143,6 +143,29 @@ export function permanentlyDeleteMemoryMessage(userId, id) {
   return null;
 }
 
+export function findMemoryMessage(userId, id) {
+  return (
+    [...messagesByKey.values()].find(
+      (message) =>
+        message.userId === userId &&
+        (message._id === id ||
+          message.gmailMessageId === id)
+    ) || null
+  );
+}
+
+export function updateMemoryMessage(userId, id, updates) {
+  const message = findMemoryMessage(userId, id);
+
+  if (!message) {
+    return null;
+  }
+
+  Object.assign(message, updates);
+
+  return message;
+}
+
 export function purgeExpiredMemoryMessages(userId) {
   const now = Date.now();
 
@@ -155,15 +178,4 @@ export function purgeExpiredMemoryMessages(userId) {
       messagesByKey.delete(key);
     }
   }
-}
-
-function findMemoryMessage(userId, id) {
-  return (
-    [...messagesByKey.values()].find(
-      (message) =>
-        message.userId === userId &&
-        (message._id === id ||
-          message.gmailMessageId === id)
-    ) || null
-  );
 }

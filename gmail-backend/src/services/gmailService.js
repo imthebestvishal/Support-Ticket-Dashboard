@@ -8,6 +8,43 @@ import {
 } from "./memoryStore.js";
 import { askAgentRouter } from "./agentRouterService.js";
 
+function extractEmailAddress(value = "") {
+  const match = value.match(/<([^>]+)>/);
+  const email = (match?.[1] || value).trim();
+
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    ? email
+    : "";
+}
+
+function replySubject(subject = "") {
+  const cleanSubject = subject.trim() || "Your support request";
+
+  return /^re:/i.test(cleanSubject)
+    ? cleanSubject
+    : `Re: ${cleanSubject}`;
+}
+
+function encodeBase64Url(value) {
+  return Buffer.from(value)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+function buildRawReply({ to, from, subject, body }) {
+  const headers = [
+    `To: ${to}`,
+    `From: ${from}`,
+    `Subject: ${subject}`,
+    'Content-Type: text/plain; charset="UTF-8"',
+    "MIME-Version: 1.0",
+  ];
+
+  return encodeBase64Url(`${headers.join("\r\n")}\r\n\r\n${body}`);
+}
+
 function calculatePriority(subject = "", body = "", sentiment = "") {
   const text = `${subject} ${body}`.toLowerCase();
 
@@ -217,6 +254,10 @@ async function getGmailClient(user) {
   });
 }
 
+export async function getAuthenticatedGmailClient(user) {
+  return getGmailClient(user);
+}
+
 /*
 |--------------------------------------------------------------------------
 | Decode Gmail body
@@ -287,6 +328,91 @@ function getHeader(headers, name) {
   );
 
   return header?.value || "";
+}
+
+export async function generateReplyDraft(message) {
+  if (message.replyDraft) {
+    return message.replyDraft;
+  }
+
+  const fallback =
+    message.suggestedResponse ||
+    "Thank you for contacting us. We have received your request and will review it shortly.";
+
+  try {
+    return await askAgentRouter({
+      messages: [
+        {
+          role: "system",
+          content:
+            "You draft concise, professional customer support replies. Return only the email body, with no markdown and no subject line.",
+        },
+        {
+          role: "user",
+          content: `
+Draft a reply to this support email.
+
+Customer: ${message.sender || "Unknown"}
+Subject: ${message.subject || "No subject"}
+Priority: ${message.priority || "Medium"}
+Category: ${message.category || "Other"}
+Summary: ${message.summary || "No summary available"}
+
+Original email:
+${message.body || "No original body available"}
+
+Suggested response:
+${fallback}
+
+Use only the supplied facts. Do not promise actions that are not stated.
+`,
+        },
+      ],
+      temperature: 0.2,
+      maxTokens: 700,
+    });
+  } catch (error) {
+    console.warn(
+      "AgentRouter reply draft unavailable.",
+      error.message
+    );
+
+    return fallback;
+  }
+}
+
+export async function sendReplyEmail({ user, message, replyBody }) {
+  const to = extractEmailAddress(message.sender || "");
+
+  if (!to) {
+    throw new Error("This ticket does not have a valid customer email address.");
+  }
+
+  if (!replyBody || !replyBody.trim()) {
+    throw new Error("Reply body is required.");
+  }
+
+  const gmail = await getAuthenticatedGmailClient(user);
+  const raw = buildRawReply({
+    to,
+    from: user.email,
+    subject: replySubject(message.subject || ""),
+    body: replyBody.trim(),
+  });
+
+  const response = await gmail.users.messages.send({
+    userId: "me",
+    requestBody: {
+      raw,
+      ...(message.gmailThreadId
+        ? {
+            threadId: message.gmailThreadId,
+          }
+        : {}),
+    },
+  });
+
+  return response.data;
 }
 
 /*
@@ -462,6 +588,7 @@ export async function fetchAndAnalyzeMessages(userId) {
 
       const messageData = {
         gmailMessageId: message.id,
+        gmailThreadId: message.threadId || "",
         userId,
         sender,
         subject,

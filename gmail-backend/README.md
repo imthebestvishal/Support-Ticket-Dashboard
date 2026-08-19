@@ -26,7 +26,13 @@ This is a Node.js + Express backend to connect Gmail, store messages in MongoDB,
    ```text
    http://localhost:5000/auth/google/callback
    ```
-5. Add the `gmail.readonly` scope to your OAuth consent screen.
+5. Add these scopes to your OAuth consent screen:
+   ```text
+   https://www.googleapis.com/auth/gmail.readonly
+   https://www.googleapis.com/auth/gmail.send
+   ```
+
+Existing users must reconnect Gmail once after the send scope is added.
 
 ## API Endpoints
 

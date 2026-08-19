@@ -769,6 +769,18 @@ button:disabled {
   border-bottom: 0;
 }
 
+.ticket-reply-item {
+  border-bottom: 1px solid #f2f4f7;
+}
+
+.ticket-reply-item:last-child {
+  border-bottom: 0;
+}
+
+.ticket-reply-item .ticket-row {
+  border-bottom: 0;
+}
+
 .ticket-row:hover {
   background: #fcfcfd;
 }
@@ -813,6 +825,78 @@ button:disabled {
   gap: 6px;
 
   max-width: 260px;
+}
+
+.compact-action {
+  min-height: 28px;
+  padding: 6px 10px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.reply-draft-panel {
+  margin: 0 20px 16px 68px;
+  padding: 14px;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  background: #fcfcfd;
+}
+
+.reply-draft-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  color: #344054;
+  font-size: 12px;
+}
+
+.reply-draft-header span {
+  color: #98a2b3;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.reply-draft-panel textarea {
+  width: 100%;
+  min-height: 140px;
+  resize: vertical;
+  padding: 12px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #344054;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.reply-draft-panel textarea:focus {
+  border-color: #599345;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(89, 147, 69, 0.12);
+}
+
+.reply-draft-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.reply-draft-error,
+.reply-draft-success {
+  margin: 10px 0 0;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.reply-draft-error {
+  color: #ef4444;
+}
+
+.reply-draft-success {
+  color: #599345;
 }
 
 .badge {
@@ -5543,6 +5627,29 @@ body.dark-theme .ticket-row {
 
 body.dark-theme .ticket-row:hover {
   background: #131b27 !important;
+}
+
+body.dark-theme .ticket-reply-item {
+  border-bottom-color: #182232 !important;
+}
+
+body.dark-theme .reply-draft-panel {
+  background: #090e17 !important;
+  border-color: #182232 !important;
+}
+
+body.dark-theme .reply-draft-header strong {
+  color: #ffffff !important;
+}
+
+body.dark-theme .reply-draft-header span {
+  color: #64748b !important;
+}
+
+body.dark-theme .reply-draft-panel textarea {
+  background: #0e141d !important;
+  border-color: #233044 !important;
+  color: #ffffff !important;
 }
 
 /* Badge Tags in Dark Mode (High, Medium, Low, Open, Category Pills) */

@@ -8,6 +8,7 @@ const GMAIL_AUTH_TOKEN_KEY = "gmailAuthToken";
 type Ticket = {
   _id?: string;
   gmailMessageId?: string;
+  gmailThreadId?: string;
   sender?: string;
   subject?: string;
   body?: string;
@@ -19,6 +20,17 @@ type Ticket = {
   receivedAt?: string;
   deletedAt?: string | null;
   expiresAt?: string | null;
+  replyDraft?: string;
+  sentReply?: string;
+  replySentAt?: string | null;
+};
+
+type ReplyDraftState = {
+  draft: string;
+  loading: boolean;
+  sending: boolean;
+  error: string;
+  success: string;
 };
 
 type SessionUser = {
@@ -78,6 +90,10 @@ function priorityClass(priority?: string) {
 
 function ticketId(ticket: Ticket) {
   return ticket._id || ticket.gmailMessageId || "";
+}
+
+function hasUsableSender(sender?: string) {
+  return /[^\s@]+@[^\s@]+\.[^\s@]+/.test(sender || "");
 }
 
 function daysRemaining(date?: string | null) {
@@ -432,6 +448,9 @@ function Workspace() {
 
   const [message, setMessage] =
     useState("");
+
+  const [replyDrafts, setReplyDrafts] =
+    useState<Record<string, ReplyDraftState>>({});
 
   const [assistantQuestion, setAssistantQuestion] =
     useState("");
@@ -945,6 +964,214 @@ function Workspace() {
       );
     } finally {
       setGmailLoading(false);
+    }
+  }
+
+  function updateTicketEverywhere(updatedTicket: Ticket) {
+    const id = ticketId(updatedTicket);
+
+    if (!id) {
+      return;
+    }
+
+    const mergeTicket = (ticket: Ticket) =>
+      ticketId(ticket) === id
+        ? {
+            ...ticket,
+            ...updatedTicket,
+          }
+        : ticket;
+
+    setTickets((previous) =>
+      previous.map(mergeTicket)
+    );
+
+    setGmailMessages((previous) =>
+      previous.map(mergeTicket)
+    );
+  }
+
+  function closeReplyDraft(ticket: Ticket) {
+    const id = ticketId(ticket);
+
+    if (!id) {
+      return;
+    }
+
+    setReplyDrafts((previous) => {
+      const next = { ...previous };
+      delete next[id];
+      return next;
+    });
+  }
+
+  async function draftTicketReply(ticket: Ticket) {
+    const id = ticketId(ticket);
+
+    if (!id) {
+      return;
+    }
+
+    setReplyDrafts((previous) => ({
+      ...previous,
+      [id]: {
+        draft: previous[id]?.draft || ticket.replyDraft || "",
+        loading: true,
+        sending: false,
+        error: "",
+        success: "",
+      },
+    }));
+
+    try {
+      const response = await fetch(
+        `${API}/api/messages/${encodeURIComponent(id)}/draft-reply`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            ...getGmailAuthHeaders(),
+          },
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error || "Failed to generate reply draft"
+        );
+      }
+
+      if (data.message) {
+        updateTicketEverywhere(data.message);
+      }
+
+      setReplyDrafts((previous) => ({
+        ...previous,
+        [id]: {
+          draft: data.draft || "",
+          loading: false,
+          sending: false,
+          error: "",
+          success: "",
+        },
+      }));
+    } catch (error) {
+      setReplyDrafts((previous) => ({
+        ...previous,
+        [id]: {
+          draft: previous[id]?.draft || "",
+          loading: false,
+          sending: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : "Failed to generate reply draft",
+          success: "",
+        },
+      }));
+    }
+  }
+
+  function editReplyDraft(ticket: Ticket, draft: string) {
+    const id = ticketId(ticket);
+
+    if (!id) {
+      return;
+    }
+
+    setReplyDrafts((previous) => ({
+      ...previous,
+      [id]: {
+        draft,
+        loading: false,
+        sending: false,
+        error: "",
+        success: previous[id]?.success || "",
+      },
+    }));
+  }
+
+  async function sendTicketReply(ticket: Ticket) {
+    const id = ticketId(ticket);
+    const state = id ? replyDrafts[id] : undefined;
+    const replyBody = state?.draft?.trim() || "";
+
+    if (!id || !replyBody) {
+      return;
+    }
+
+    setReplyDrafts((previous) => ({
+      ...previous,
+      [id]: {
+        ...(previous[id] || {
+          draft: replyBody,
+          loading: false,
+          error: "",
+          success: "",
+        }),
+        draft: replyBody,
+        sending: true,
+        error: "",
+      },
+    }));
+
+    try {
+      const response = await fetch(
+        `${API}/api/messages/${encodeURIComponent(id)}/send-reply`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            ...getGmailAuthHeaders(),
+          },
+          body: JSON.stringify({
+            replyBody,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error || "Failed to send reply"
+        );
+      }
+
+      if (data.message) {
+        updateTicketEverywhere(data.message);
+      }
+
+      setReplyDrafts((previous) => ({
+        ...previous,
+        [id]: {
+          draft: replyBody,
+          loading: false,
+          sending: false,
+          error: "",
+          success: "Reply sent and ticket marked resolved.",
+        },
+      }));
+    } catch (error) {
+      setReplyDrafts((previous) => ({
+        ...previous,
+        [id]: {
+          ...(previous[id] || {
+            draft: replyBody,
+            loading: false,
+            success: "",
+          }),
+          sending: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : "Failed to send reply",
+        },
+      }));
     }
   }
 
@@ -1758,59 +1985,165 @@ function Workspace() {
                     </div>
                   ) : (
                     filteredTickets.map(
-                      (ticket) => (
-                        <div
-                          className="ticket-row"
-                          key={
-                            ticket._id
-                          }
-                        >
-                          <CategoryIcon category={ticket.category} subject={ticket.subject} sender={ticket.sender} />
+                      (ticket) => {
+                        const id = ticketId(ticket);
+                        const replyState = replyDrafts[id];
+                        const canReply =
+                          Boolean(ticket.gmailMessageId) &&
+                          hasUsableSender(ticket.sender);
 
-                          <div>
+                        return (
+                          <article
+                            className="ticket-reply-item"
+                            key={id}
+                          >
+                            <div className="ticket-row">
+                              <CategoryIcon category={ticket.category} subject={ticket.subject} sender={ticket.sender} />
 
-                            <div className="ticket-title">
-                              {ticket.subject ||
-                                "Untitled"}
+                              <div>
+
+                                <div className="ticket-title">
+                                  {ticket.subject ||
+                                    "Untitled"}
+                                </div>
+
+                                <div className="ticket-meta">
+                                  {ticket.sender ||
+                                    "Unknown customer"}
+                                </div>
+
+                                <div className="ticket-meta">
+                                  {ticket.summary ||
+                                    "No summary"}
+                                </div>
+
+                                {ticket.replySentAt && (
+                                  <div className="ticket-meta">
+                                    Reply sent:{" "}
+                                    {new Date(
+                                      ticket.replySentAt
+                                    ).toLocaleString()}
+                                  </div>
+                                )}
+
+                              </div>
+
+                              <div className="badges">
+
+                                <span className="badge badge-gray">
+                                  {ticket.category ||
+                                    "Other"}
+                                </span>
+
+                                <span
+                                  className={priorityClass(
+                                    ticket.priority
+                                  )}
+                                >
+                                  {ticket.priority ||
+                                    "Medium"}
+                                </span>
+
+                                <span className="badge badge-gray">
+                                  {ticket.status ||
+                                    "Open"}
+                                </span>
+
+                                <button
+                                  className="outline-button compact-action"
+                                  onClick={() =>
+                                    draftTicketReply(ticket)
+                                  }
+                                  disabled={
+                                    !canReply ||
+                                    replyState?.loading ||
+                                    replyState?.sending
+                                  }
+                                  title={
+                                    canReply
+                                      ? "Generate an editable email reply"
+                                      : "Replies require a Gmail-backed ticket with a valid sender email"
+                                  }
+                                >
+                                  {replyState?.loading
+                                    ? "Drafting..."
+                                    : "Draft Reply"}
+                                </button>
+
+                              </div>
+
                             </div>
 
-                            <div className="ticket-meta">
-                              {ticket.sender ||
-                                "Unknown customer"}
-                            </div>
+                            {replyState && (
+                              <div className="reply-draft-panel">
+                                <div className="reply-draft-header">
+                                  <strong>Email reply draft</strong>
+                                  <span>
+                                    Review before sending through Gmail.
+                                  </span>
+                                </div>
 
-                            <div className="ticket-meta">
-                              {ticket.summary ||
-                                "No summary"}
-                            </div>
+                                <textarea
+                                  value={replyState.draft}
+                                  onChange={(event) =>
+                                    editReplyDraft(
+                                      ticket,
+                                      event.target.value
+                                    )
+                                  }
+                                  disabled={
+                                    replyState.loading ||
+                                    replyState.sending
+                                  }
+                                  rows={7}
+                                />
 
-                          </div>
+                                {replyState.error && (
+                                  <p className="reply-draft-error">
+                                    {replyState.error}
+                                  </p>
+                                )}
 
-                          <div className="badges">
+                                {replyState.success && (
+                                  <p className="reply-draft-success">
+                                    {replyState.success}
+                                  </p>
+                                )}
 
-                            <span className="badge badge-gray">
-                              {ticket.category ||
-                                "Other"}
-                            </span>
+                                <div className="reply-draft-actions">
+                                  <button
+                                    className="outline-button"
+                                    onClick={() =>
+                                      closeReplyDraft(ticket)
+                                    }
+                                    disabled={
+                                      replyState.sending
+                                    }
+                                  >
+                                    Cancel
+                                  </button>
 
-                            <span
-                              className={priorityClass(
-                                ticket.priority
-                              )}
-                            >
-                              {ticket.priority ||
-                                "Medium"}
-                            </span>
-
-                            <span className="badge badge-gray">
-                              {ticket.status ||
-                                "Open"}
-                            </span>
-
-                          </div>
-
-                        </div>
-                      )
+                                  <button
+                                    className="primary-button"
+                                    onClick={() =>
+                                      sendTicketReply(ticket)
+                                    }
+                                    disabled={
+                                      replyState.loading ||
+                                      replyState.sending ||
+                                      !replyState.draft.trim()
+                                    }
+                                  >
+                                    {replyState.sending
+                                      ? "Sending..."
+                                      : "Send Reply"}
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </article>
+                        );
+                      }
                     )
                   )}
 

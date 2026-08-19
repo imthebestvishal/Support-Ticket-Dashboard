@@ -9,6 +9,12 @@ const messageSchema = new mongoose.Schema(
       index: true,
     },
 
+    gmailThreadId: {
+      type: String,
+      default: "",
+      index: true,
+    },
+
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -61,6 +67,21 @@ const messageSchema = new mongoose.Schema(
     suggestedResponse: {
       type: String,
       default: "",
+    },
+
+    replyDraft: {
+      type: String,
+      default: "",
+    },
+
+    sentReply: {
+      type: String,
+      default: "",
+    },
+
+    replySentAt: {
+      type: Date,
+      default: null,
     },
 
     isTicket: {

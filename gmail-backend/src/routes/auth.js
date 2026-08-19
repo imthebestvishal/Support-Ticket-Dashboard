@@ -54,6 +54,7 @@ router.get("/google", (req, res) => {
 
     scope: [
       "https://www.googleapis.com/auth/gmail.readonly",
+      "https://www.googleapis.com/auth/gmail.send",
       "https://www.googleapis.com/auth/userinfo.profile"
     ],
 
