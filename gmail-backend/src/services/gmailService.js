@@ -330,14 +330,41 @@ function getHeader(headers, name) {
   return header?.value || "";
 }
 
-export async function generateReplyDraft(message) {
-  if (message.replyDraft) {
-    return message.replyDraft;
+function summarizeForFallback(message) {
+  const summary = (message.summary || "").trim();
+
+  if (summary && summary !== "No summary available") {
+    return summary;
   }
 
-  const fallback =
-    message.suggestedResponse ||
-    "Thank you for contacting us. We have received your request and will review it shortly.";
+  const body = (message.body || "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return body
+    ? body.slice(0, 220)
+    : "your support request";
+}
+
+function buildFallbackReply(message) {
+  const issue = summarizeForFallback(message);
+  const category = message.category || "support";
+  const priority = message.priority || "Medium";
+
+  return `Hi,
+
+Thank you for contacting us about "${message.subject || issue}".
+
+We understand this is related to ${category.toLowerCase()} support, and we have noted the priority as ${priority}. Based on the details available, the main issue is: ${issue}
+
+Our support team will review this and follow up with the next available update.
+
+Best regards,
+Support Team`;
+}
+
+export async function generateReplyDraft(message) {
+  const fallback = buildFallbackReply(message);
 
   try {
     return await askAgentRouter({
@@ -345,7 +372,7 @@ export async function generateReplyDraft(message) {
         {
           role: "system",
           content:
-            "You draft concise, professional customer support replies. Return only the email body, with no markdown and no subject line.",
+            "You draft concise, professional customer support replies. Return only the email body, with no markdown and no subject line. Every draft must be specific to the customer's subject, summary, category, and message.",
         },
         {
           role: "user",
@@ -362,13 +389,13 @@ Original email:
 ${message.body || "No original body available"}
 
 Suggested response:
-${fallback}
+${message.suggestedResponse || fallback}
 
-Use only the supplied facts. Do not promise actions that are not stated.
+Write a fresh reply for this exact email. Mention the specific issue from the summary or body. Use only the supplied facts. Do not promise actions that are not stated.
 `,
         },
       ],
-      temperature: 0.2,
+      temperature: 0.35,
       maxTokens: 700,
     });
   } catch (error) {
