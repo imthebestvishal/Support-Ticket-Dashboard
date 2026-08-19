@@ -1,4 +1,5 @@
-﻿import express from "express";
+import express from "express";
+import crypto from "crypto";
 import { User } from "../models/user.js";
 import mongoose from "mongoose";
 import { Message } from "../models/message.js";
@@ -17,6 +18,50 @@ import {
 const router = express.Router();
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+function getBearerUserId(req) {
+  const header = req.get("authorization") || "";
+  const token = header.startsWith("Bearer ")
+    ? header.slice("Bearer ".length)
+    : "";
+
+  if (!token) {
+    return "";
+  }
+
+  const [payload, signature] = token.split(".");
+
+  if (!payload || !signature) {
+    return "";
+  }
+
+  const expectedSignature = crypto
+    .createHmac("sha256", process.env.SESSION_SECRET)
+    .update(payload)
+    .digest("base64url");
+
+  if (signature.length !== expectedSignature.length) {
+    return "";
+  }
+
+  if (
+    !crypto.timingSafeEqual(
+      Buffer.from(signature),
+      Buffer.from(expectedSignature)
+    )
+  ) {
+    return "";
+  }
+
+  const data = JSON.parse(
+    Buffer.from(payload, "base64url").toString("utf8")
+  );
+
+  if (!data.userId || data.exp < Date.now()) {
+    return "";
+  }
+
+  return data.userId;
+}
 
 function messageQuery(userId, id) {
   const filters = [
@@ -40,7 +85,9 @@ function messageQuery(userId, id) {
 
 const requireAuth = async (req, res, next) => {
   try {
-    if (!req.session?.userId) {
+    const userId = req.session?.userId || getBearerUserId(req);
+
+    if (!userId) {
       return res.status(401).send({
         error: "Not authenticated",
       });
@@ -48,8 +95,8 @@ const requireAuth = async (req, res, next) => {
 
     const user =
       mongoose.connection.readyState === 1
-        ? await User.findById(req.session.userId)
-        : getMemoryUser(req.session.userId);
+        ? await User.findById(userId)
+        : getMemoryUser(userId);
 
     if (!user) {
       return res.status(401).send({
@@ -338,3 +385,6 @@ router.post("/assistant", requireAuth, async (req, res) => {
 });
 
 export { router as apiRouter };
+
+
+

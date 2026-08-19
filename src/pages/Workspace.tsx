@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { authClient } from "../lib/auth";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const GMAIL_AUTH_TOKEN_KEY = "gmailAuthToken";
 
 type Ticket = {
   _id?: string;
@@ -106,6 +107,16 @@ function getGreeting() {
   }
 
   return "Good evening";
+}
+
+function getGmailAuthHeaders(): Record<string, string> {
+  const token = localStorage.getItem(GMAIL_AUTH_TOKEN_KEY);
+
+  return token
+    ? {
+        Authorization: `Bearer ${token}`,
+      }
+    : {};
 }
 
 function formatDisplayName(user: SessionUser | null) {
@@ -449,6 +460,22 @@ function Workspace() {
     });
 
   useEffect(() => {
+    const hashQuery = window.location.hash.split("?")[1] || "";
+    const params = new URLSearchParams(hashQuery);
+    const authToken = params.get("auth_token");
+    const gmailEmail = params.get("email");
+
+    if (authToken) {
+      localStorage.setItem(GMAIL_AUTH_TOKEN_KEY, authToken);
+      localStorage.setItem("gmailConnected", "true");
+
+      if (gmailEmail) {
+        localStorage.setItem("gmailEmail", gmailEmail);
+      }
+
+      window.history.replaceState(null, "", "/#/dashboard");
+    }
+
     checkBackend();
     checkGmail();
     loadSessionUser();
@@ -497,6 +524,7 @@ function Workspace() {
           credentials: "include",
           headers: {
             "Content-Type": "application/json",
+            ...getGmailAuthHeaders(),
           },
           body: JSON.stringify({
             question: questionToSubmit.trim(),
@@ -561,6 +589,7 @@ function Workspace() {
         `${API}/api/gmail/status`,
         {
           credentials: "include",
+          headers: getGmailAuthHeaders(),
         }
       );
 
@@ -618,6 +647,7 @@ function Workspace() {
         `${API}/api/messages`,
         {
           credentials: "include",
+          headers: getGmailAuthHeaders(),
         }
       );
 
@@ -674,6 +704,7 @@ function Workspace() {
         `${API}/api/messages/trash`,
         {
           credentials: "include",
+          headers: getGmailAuthHeaders(),
         }
       );
 
@@ -730,6 +761,7 @@ function Workspace() {
         {
           method: "DELETE",
           credentials: "include",
+          headers: getGmailAuthHeaders(),
         }
       );
 
@@ -788,6 +820,7 @@ function Workspace() {
         {
           method: "DELETE",
           credentials: "include",
+          headers: getGmailAuthHeaders(),
         }
       );
 
@@ -834,6 +867,7 @@ function Workspace() {
         {
           method: "POST",
           credentials: "include",
+          headers: getGmailAuthHeaders(),
         }
       );
 
@@ -887,6 +921,7 @@ function Workspace() {
         {
           method: "DELETE",
           credentials: "include",
+          headers: getGmailAuthHeaders(),
         }
       );
 
@@ -928,6 +963,7 @@ function Workspace() {
           headers: {
             "Content-Type":
               "application/json",
+            ...getGmailAuthHeaders(),
           },
         }
       );
@@ -2934,6 +2970,7 @@ function Workspace() {
 }
 
 export default Workspace;
+
 
 
 

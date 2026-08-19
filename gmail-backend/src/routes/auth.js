@@ -1,4 +1,5 @@
-﻿import express from "express";
+import express from "express";
+import crypto from "crypto";
 import dotenv from "dotenv";
 import { google } from "googleapis";
 import mongoose from "mongoose";
@@ -8,6 +9,22 @@ import { saveMemoryUser } from "../services/memoryStore.js";
 dotenv.config();
 
 const router = express.Router();
+
+function createAuthToken(userId) {
+  const payload = Buffer.from(
+    JSON.stringify({
+      userId,
+      exp: Date.now() + 24 * 60 * 60 * 1000,
+    })
+  ).toString("base64url");
+
+  const signature = crypto
+    .createHmac("sha256", process.env.SESSION_SECRET)
+    .update(payload)
+    .digest("base64url");
+
+  return `${payload}.${signature}`;
+}
 
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
@@ -200,6 +217,8 @@ router.get("/google/callback", async (req, res) => {
       const redirectUrl =
         `${baseRedirectUrl}${separator}gmail_connected=true&email=${encodeURIComponent(
           email
+        )}&auth_token=${encodeURIComponent(
+          createAuthToken(user._id.toString())
         )}`;
 
       console.log(
@@ -226,4 +245,3 @@ router.get("/google/callback", async (req, res) => {
 });
 
 export { router as authRouter };
-
