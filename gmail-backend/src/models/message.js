@@ -44,6 +44,20 @@ const messageSchema = new mongoose.Schema(
 
     category: {
       type: String,
+      enum: [
+        "Technical",
+        "Account",
+        "Billing",
+        "Finance",
+        "Personal",
+        "Promotions",
+        "Social",
+        "Education",
+        "Job/Career",
+        "Security",
+        "General",
+        "Other",
+      ],
       default: "Other",
     },
 
@@ -65,6 +79,11 @@ const messageSchema = new mongoose.Schema(
     },
 
     suggestedResponse: {
+      type: String,
+      default: "",
+    },
+
+    classificationReason: {
       type: String,
       default: "",
     },

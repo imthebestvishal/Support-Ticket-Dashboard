@@ -27,6 +27,7 @@ type Ticket = {
 
 type ReplyDraftState = {
   draft: string;
+  source: string;
   loading: boolean;
   sending: boolean;
   error: string;
@@ -1016,6 +1017,7 @@ function Workspace() {
       ...previous,
       [id]: {
         draft: previous[id]?.draft || ticket.replyDraft || "",
+        source: "",
         loading: true,
         sending: false,
         error: "",
@@ -1052,9 +1054,13 @@ function Workspace() {
         ...previous,
         [id]: {
           draft: data.draft || "",
+          source: data.source || "agentrouter",
           loading: false,
           sending: false,
-          error: "",
+          error:
+            data.source === "fallback" && data.providerError
+              ? `AgentRouter unavailable: ${data.providerError}`
+              : "",
           success: "",
         },
       }));
@@ -1063,6 +1069,7 @@ function Workspace() {
         ...previous,
         [id]: {
           draft: previous[id]?.draft || "",
+          source: previous[id]?.source || "",
           loading: false,
           sending: false,
           error:
@@ -1086,6 +1093,7 @@ function Workspace() {
       ...previous,
       [id]: {
         draft,
+        source: previous[id]?.source || "",
         loading: false,
         sending: false,
         error: "",
@@ -1108,6 +1116,7 @@ function Workspace() {
       [id]: {
         ...(previous[id] || {
           draft: replyBody,
+          source: "",
           loading: false,
           error: "",
           success: "",
@@ -1150,6 +1159,7 @@ function Workspace() {
         ...previous,
         [id]: {
           draft: replyBody,
+          source: previous[id]?.source || "",
           loading: false,
           sending: false,
           error: "",
@@ -1162,6 +1172,7 @@ function Workspace() {
         [id]: {
           ...(previous[id] || {
             draft: replyBody,
+            source: "",
             loading: false,
             success: "",
           }),
@@ -1393,7 +1404,15 @@ function Workspace() {
   const resolvedRate =
     percentOf(resolvedCount, tickets.length);
 
-  const openCategories = ["Technical", "Billing", "General", "Account", "Feature"];
+  const openCategories = [
+    "Technical",
+    "Account",
+    "Billing",
+    "Finance",
+    "Personal",
+    "Security",
+    "General",
+  ];
   const trendBars = openCategories.map((cat) => {
     const count = tickets.filter((t) => t.category === cat).length;
     return Math.max(18, Math.min(95, Math.round((count / Math.max(tickets.length, 1)) * 100)));
@@ -2078,9 +2097,24 @@ function Workspace() {
                               <div className="reply-draft-panel">
                                 <div className="reply-draft-header">
                                   <strong>Email reply draft</strong>
-                                  <span>
-                                    Review before sending through Gmail.
-                                  </span>
+                                  <div className="reply-draft-header-meta">
+                                    <span
+                                      className={`reply-source-tag ${
+                                        replyState.source === "fallback"
+                                          ? "is-fallback"
+                                          : "is-agentrouter"
+                                      }`}
+                                    >
+                                      {replyState.source === "fallback"
+                                        ? "Drafted locally"
+                                        : replyState.source === "agentrouter"
+                                        ? "Drafted by AgentRouter"
+                                        : "Generating draft"}
+                                    </span>
+                                    <span>
+                                      Review before sending through Gmail.
+                                    </span>
+                                  </div>
                                 </div>
 
                                 <textarea

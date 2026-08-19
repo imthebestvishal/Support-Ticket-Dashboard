@@ -382,7 +382,8 @@ router.post("/messages/:id/draft-reply", requireAuth, async (req, res) => {
       });
     }
 
-    const draft = await generateReplyDraft(message);
+    const draftResult = await generateReplyDraft(message);
+    const draft = draftResult.draft;
 
     const updatedMessage =
       mongoose.connection.readyState === 1
@@ -403,6 +404,8 @@ router.post("/messages/:id/draft-reply", requireAuth, async (req, res) => {
 
     res.send({
       draft,
+      source: draftResult.source,
+      providerError: draftResult.providerError || "",
       message: updatedMessage,
     });
   } catch (error) {

@@ -8,6 +8,34 @@ import {
 } from "./memoryStore.js";
 import { askAgentRouter } from "./agentRouterService.js";
 
+const VALID_CATEGORIES = [
+  "Technical",
+  "Account",
+  "Billing",
+  "Finance",
+  "Personal",
+  "Promotions",
+  "Social",
+  "Education",
+  "Job/Career",
+  "Security",
+  "General",
+  "Other",
+];
+
+const VALID_PRIORITIES = [
+  "Low",
+  "Medium",
+  "High",
+  "Urgent",
+];
+
+const VALID_SENTIMENTS = [
+  "Positive",
+  "Neutral",
+  "Negative",
+];
+
 function extractEmailAddress(value = "") {
   const match = value.match(/<([^>]+)>/);
   const email = (match?.[1] || value).trim();
@@ -45,88 +73,140 @@ function buildRawReply({ to, from, subject, body }) {
   return encodeBase64Url(`${headers.join("\r\n")}\r\n\r\n${body}`);
 }
 
-function calculatePriority(subject = "", body = "", sentiment = "") {
-  const text = `${subject} ${body}`.toLowerCase();
+function normalizedValue(value, allowed, fallback) {
+  return allowed.includes(value) ? value : fallback;
+}
 
-  const highPriorityWords = [
-    "urgent",
-    "urgently",
-    "emergency",
-    "critical",
-    "asap",
-    "immediately",
-    "account locked",
-    "locked out",
-    "cannot access",
-    "can't access",
-    "unable to login",
-    "unable to log in",
-    "password hacked",
-    "hacked",
-    "security breach",
-    "fraud",
-    "unauthorized",
-    "unauthorised",
-    "stolen",
-    "payment failed",
-    "payment failure",
-    "charged twice",
-    "double charged",
-    "money missing",
-    "service down",
-    "system down",
-    "website down",
-    "outage",
-    "not working",
-    "completely broken",
-    "deadline today",
-    "deadline tomorrow",
-    "legal action",
-    "lawsuit",
-    "very angry",
-    "extremely disappointed"
-  ];
-
-  const mediumPriorityWords = [
-    "complaint",
-    "complain",
-    "refund",
-    "return",
-    "billing",
-    "invoice",
-    "payment",
-    "technical issue",
-    "problem",
-    "issue",
-    "error",
-    "bug",
-    "delayed",
-    "delay",
-    "order problem",
-    "account problem",
-    "support",
-    "help",
-    "request",
-    "not satisfied",
-    "disappointed"
-  ];
-
-  const highMatches = highPriorityWords.filter(
-    (word) => text.includes(word)
-  ).length;
-
-  const mediumMatches = mediumPriorityWords.filter(
-    (word) => text.includes(word)
-  ).length;
+function fallbackCategory(text) {
+  if (
+    text.includes("hack") ||
+    text.includes("fraud") ||
+    text.includes("unauthorized") ||
+    text.includes("security") ||
+    text.includes("password")
+  ) {
+    return "Security";
+  }
 
   if (
-    highMatches >= 1 ||
-    sentiment.toLowerCase() === "very negative"
+    text.includes("bank") ||
+    text.includes("transaction") ||
+    text.includes("investment") ||
+    text.includes("portfolio") ||
+    text.includes("card")
+  ) {
+    return "Finance";
+  }
+
+  if (
+    text.includes("bill") ||
+    text.includes("invoice") ||
+    text.includes("payment") ||
+    text.includes("refund") ||
+    text.includes("charged")
+  ) {
+    return "Billing";
+  }
+
+  if (
+    text.includes("login") ||
+    text.includes("account") ||
+    text.includes("access")
+  ) {
+    return "Account";
+  }
+
+  if (
+    text.includes("error") ||
+    text.includes("bug") ||
+    text.includes("technical") ||
+    text.includes("not working") ||
+    text.includes("server") ||
+    text.includes("system")
+  ) {
+    return "Technical";
+  }
+
+  if (
+    text.includes("linkedin") ||
+    text.includes("twitter") ||
+    text.includes("github") ||
+    text.includes("social")
+  ) {
+    return "Social";
+  }
+
+  if (
+    text.includes("course") ||
+    text.includes("class") ||
+    text.includes("university") ||
+    text.includes("school") ||
+    text.includes("exam")
+  ) {
+    return "Education";
+  }
+
+  if (
+    text.includes("job") ||
+    text.includes("interview") ||
+    text.includes("resume") ||
+    text.includes("career") ||
+    text.includes("application")
+  ) {
+    return "Job/Career";
+  }
+
+  if (
+    text.includes("offer") ||
+    text.includes("deal") ||
+    text.includes("promo") ||
+    text.includes("sale") ||
+    text.includes("discount")
+  ) {
+    return "Promotions";
+  }
+
+  if (
+    text.includes("meet") ||
+    text.includes("family") ||
+    text.includes("friend") ||
+    text.includes("birthday")
+  ) {
+    return "Personal";
+  }
+
+  return "General";
+}
+
+function fallbackPriority(text) {
+  if (
+    text.includes("urgent") ||
+    text.includes("critical") ||
+    text.includes("emergency") ||
+    text.includes("fraud") ||
+    text.includes("unauthorized") ||
+    text.includes("security breach")
+  ) {
+    return "Urgent";
+  }
+
+  if (
+    text.includes("asap") ||
+    text.includes("locked") ||
+    text.includes("cannot access") ||
+    text.includes("charged twice") ||
+    text.includes("not working")
   ) {
     return "High";
   }
 
-  if (mediumMatches >= 1) {
+  if (
+    text.includes("issue") ||
+    text.includes("problem") ||
+    text.includes("refund") ||
+    text.includes("billing") ||
+    text.includes("help")
+  ) {
     return "Medium";
   }
 
@@ -139,9 +219,9 @@ const GMAIL_FETCH_LIMIT = Number(
 
 async function analyzeMessage(subject, body, sender) {
   const prompt = `
-You are an AI support-ticket analyzer.
+You are an expert email triage and support-ticket classifier.
 
-Analyze the following email and determine whether it should become a support ticket.
+Analyze the following email and decide whether it should become an actionable ticket.
 
 Email:
 From: ${sender}
@@ -154,28 +234,50 @@ Return ONLY valid JSON in exactly this format:
 {
   "category": "Technical",
   "priority": "Medium",
-  "summary": "Short summary of the customer's issue",
+  "summary": "Short specific summary of the email",
   "sentiment": "Neutral",
-  "suggestedResponse": "Professional response to the customer",
-  "isTicket": true
+  "suggestedResponse": "Natural professional reply specific to this email",
+  "isTicket": true,
+  "classificationReason": "One short reason for category and priority"
 }
 
 Rules:
 
 category must be exactly one of:
-Technical, Billing, Account, General, Other
+Technical, Account, Billing, Finance, Personal, Promotions, Social, Education, Job/Career, Security, General, Other
+
+Category definitions:
+- Technical: app, website, software, hardware, bugs, errors, outages, broken flows.
+- Account: login, profile, credentials, access, account settings, subscription access.
+- Billing: invoices, refunds, charges, payment support, plan billing, receipts.
+- Finance: bank/card alerts, transactions, investments, portfolio, financial account activity.
+- Personal: personal notes, informal messages, friends/family, non-business conversation.
+- Promotions: offers, ads, deals, newsletters, campaigns, discounts, marketing.
+- Social: social network notifications, follows, messages, community updates.
+- Education: school, course, university, exam, assignment, learning content.
+- Job/Career: job applications, recruiters, interviews, resumes, hiring, career updates.
+- Security: fraud, unauthorized access, password compromise, suspicious activity, account safety.
+- General: actionable/support-like but not covered above.
+- Other: non-actionable or unclear.
 
 priority must be exactly one of:
 Low, Medium, High, Urgent
 
+Priority definitions:
+- Urgent: active security/fraud, outage, money loss, legal threat, immediate deadline, or critical access loss.
+- High: blocked user, serious account/payment/product issue, strong negative impact, needs quick human attention.
+- Medium: normal support request, question, issue, refund/billing request without immediate risk.
+- Low: informational, FYI, promotion, newsletter, social update, personal note, no clear support urgency.
+
 sentiment must be exactly one of:
 Positive, Neutral, Negative
 
-isTicket must be true if the email contains a request, problem,
-complaint, support question, account issue, billing issue,
-technical issue, or action that requires attention.
+isTicket must be true if the email contains a request, complaint, support question, account/billing/technical/finance/security issue, or any action that requires attention.
+isTicket may be false for pure newsletters, promotions, social notifications, receipts that need no action, and personal FYI emails.
 
-Keep summary short.
+Keep summary short but specific. Avoid generic summaries.
+The suggestedResponse must sound human and natural, not a repeated template.
+Do not say "we have received your request and will review it shortly" unless there are no useful details.
 `;
 
   const text = await askAgentRouter({
@@ -199,13 +301,27 @@ Keep summary short.
     const parsed = JSON.parse(text);
 
     return {
-      category: parsed.category || "Other",
-      priority: parsed.priority || "Medium",
+      category: normalizedValue(
+        parsed.category,
+        VALID_CATEGORIES,
+        "Other"
+      ),
+      priority: normalizedValue(
+        parsed.priority,
+        VALID_PRIORITIES,
+        "Medium"
+      ),
       summary: parsed.summary || "No summary available",
-      sentiment: parsed.sentiment || "Neutral",
+      sentiment: normalizedValue(
+        parsed.sentiment,
+        VALID_SENTIMENTS,
+        "Neutral"
+      ),
       suggestedResponse:
         parsed.suggestedResponse ||
-        "Thank you for contacting us. We will review your request and get back to you shortly.",
+        "",
+      classificationReason:
+        parsed.classificationReason || "",
       isTicket:
         typeof parsed.isTicket === "boolean"
           ? parsed.isTicket
@@ -216,14 +332,17 @@ Keep summary short.
       "AgentRouter returned invalid JSON:",
       text
     );
+    const fallbackText =
+      `${subject} ${body}`.toLowerCase();
 
     return {
-      category: "Other",
-      priority: "Medium",
-      summary: text.substring(0, 500),
+      category: fallbackCategory(fallbackText),
+      priority: fallbackPriority(fallbackText),
+      summary: subject || text.substring(0, 500),
       sentiment: "Neutral",
-      suggestedResponse:
-        "Thank you for contacting us. We will review your request and get back to you shortly.",
+      suggestedResponse: "",
+      classificationReason:
+        "Fallback classification used because AgentRouter returned invalid JSON.",
       isTicket: true,
     };
   }
@@ -349,15 +468,65 @@ function summarizeForFallback(message) {
 function buildFallbackReply(message) {
   const issue = summarizeForFallback(message);
   const category = message.category || "support";
-  const priority = message.priority || "Medium";
+  const subject = message.subject || issue;
+
+  if (category === "Personal") {
+    return `Hi,
+
+Thanks for your message about "${subject}".
+
+I saw your note: ${issue}
+
+I'll take a closer look and get back to you with a proper update.
+
+Best regards,
+Support Team`;
+  }
+
+  if (category === "Finance" || category === "Billing") {
+    return `Hi,
+
+Thanks for reaching out about "${subject}".
+
+I understand this relates to ${category.toLowerCase()}, specifically: ${issue}
+
+We'll review the details carefully and follow up with the next appropriate step.
+
+Best regards,
+Support Team`;
+  }
+
+  if (category === "Security") {
+    return `Hi,
+
+Thanks for flagging this.
+
+We understand your concern about "${subject}". Based on the details available, the issue is: ${issue}
+
+Please avoid sharing any passwords or sensitive information in email while this is being reviewed.
+
+Best regards,
+Support Team`;
+  }
+
+  if (category === "Promotions" || category === "Social") {
+    return `Hi,
+
+Thanks for the update about "${subject}".
+
+We've noted the details: ${issue}
+
+Best regards,
+Support Team`;
+  }
 
   return `Hi,
 
-Thank you for contacting us about "${message.subject || issue}".
+Thanks for reaching out about "${subject}".
 
-We understand this is related to ${category.toLowerCase()} support, and we have noted the priority as ${priority}. Based on the details available, the main issue is: ${issue}
+I understand the main issue is: ${issue}
 
-Our support team will review this and follow up with the next available update.
+We'll review this and follow up with the next best step.
 
 Best regards,
 Support Team`;
@@ -367,17 +536,17 @@ export async function generateReplyDraft(message) {
   const fallback = buildFallbackReply(message);
 
   try {
-    return await askAgentRouter({
+    const draft = await askAgentRouter({
       messages: [
         {
           role: "system",
           content:
-            "You draft concise, professional customer support replies. Return only the email body, with no markdown and no subject line. Every draft must be specific to the customer's subject, summary, category, and message.",
+            "You write natural, professional email replies. Return only the email body, with no markdown and no subject line. Every draft must be specific to this exact email and should avoid sounding like a reusable support template.",
         },
         {
           role: "user",
           content: `
-Draft a reply to this support email.
+Draft a natural reply to this email.
 
 Customer: ${message.sender || "Unknown"}
 Subject: ${message.subject || "No subject"}
@@ -389,22 +558,37 @@ Original email:
 ${message.body || "No original body available"}
 
 Suggested response:
-${message.suggestedResponse || fallback}
+${message.suggestedResponse || "No prior suggested response"}
 
-Write a fresh reply for this exact email. Mention the specific issue from the summary or body. Use only the supplied facts. Do not promise actions that are not stated.
+Requirements:
+- Use a natural professional tone.
+- Mention the specific concern from the subject, summary, or body.
+- Vary the wording; do not use the same structure for every email.
+- Avoid generic lines like "we have received your request and will review it shortly."
+- Do not promise actions that are not stated.
+- Keep it concise and ready for a human agent to edit/send.
 `,
         },
       ],
-      temperature: 0.35,
+      temperature: 0.55,
       maxTokens: 700,
     });
+
+    return {
+      draft,
+      source: "agentrouter",
+    };
   } catch (error) {
     console.warn(
       "AgentRouter reply draft unavailable.",
       error.message
     );
 
-    return fallback;
+    return {
+      draft: fallback,
+      source: "fallback",
+      providerError: error.message,
+    };
   }
 }
 
@@ -558,43 +742,14 @@ export async function fetchAndAnalyzeMessages(userId) {
         const text =
           `${subject} ${body}`.toLowerCase();
 
-        let category = "General";
-
-        if (
-          text.includes("bill") ||
-          text.includes("billing") ||
-          text.includes("invoice") ||
-          text.includes("payment") ||
-          text.includes("refund") ||
-          text.includes("charged")
-        ) {
-          category = "Billing";
-        } else if (
-          text.includes("login") ||
-          text.includes("log in") ||
-          text.includes("password") ||
-          text.includes("account") ||
-          text.includes("access")
-        ) {
-          category = "Account";
-        } else if (
-          text.includes("error") ||
-          text.includes("bug") ||
-          text.includes("technical") ||
-          text.includes("not working") ||
-          text.includes("website") ||
-          text.includes("system")
-        ) {
-          category = "Technical";
-        }
-
         analysis = {
-          category: category,
-          priority: calculatePriority(subject, body, ""),
+          category: fallbackCategory(text),
+          priority: fallbackPriority(text),
           summary: subject || "Customer support request",
           sentiment: "Neutral",
-          suggestedResponse:
-            "Thank you for contacting support. We have received your request and will review it shortly.",
+          suggestedResponse: "",
+          classificationReason:
+            "Fallback classification used because AgentRouter analysis failed.",
           isTicket: true
         };
 
@@ -602,16 +757,6 @@ export async function fetchAndAnalyzeMessages(userId) {
           `Fallback result: ${JSON.stringify(analysis)}`
         );
       }
-
-      const calculatedPriority =
-        calculatePriority(
-          subject,
-          body,
-          analysis?.sentiment || ""
-        );
-
-      analysis.priority =
-        calculatedPriority;
 
       const messageData = {
         gmailMessageId: message.id,
@@ -638,6 +783,9 @@ export async function fetchAndAnalyzeMessages(userId) {
 
         suggestedResponse:
           analysis.suggestedResponse,
+
+        classificationReason:
+          analysis.classificationReason || "",
 
         isTicket:
           analysis.isTicket,

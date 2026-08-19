@@ -858,6 +858,37 @@ button:disabled {
   font-weight: 600;
 }
 
+.reply-draft-header-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.reply-source-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.reply-source-tag.is-agentrouter {
+  background: rgba(89, 147, 69, 0.12);
+  color: #3f7d32;
+  border: 1px solid rgba(89, 147, 69, 0.22);
+}
+
+.reply-source-tag.is-fallback {
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+}
+
 .reply-draft-panel textarea {
   width: 100%;
   min-height: 140px;
@@ -5644,6 +5675,18 @@ body.dark-theme .reply-draft-header strong {
 
 body.dark-theme .reply-draft-header span {
   color: #64748b !important;
+}
+
+body.dark-theme .reply-source-tag.is-agentrouter {
+  background: rgba(74, 222, 128, 0.12) !important;
+  color: #4ade80 !important;
+  border-color: rgba(74, 222, 128, 0.24) !important;
+}
+
+body.dark-theme .reply-source-tag.is-fallback {
+  background: rgba(251, 146, 60, 0.12) !important;
+  color: #fb923c !important;
+  border-color: rgba(251, 146, 60, 0.24) !important;
 }
 
 body.dark-theme .reply-draft-panel textarea {
