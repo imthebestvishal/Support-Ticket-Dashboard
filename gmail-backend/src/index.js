@@ -5,6 +5,7 @@ import morgan from "morgan";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
 import session from "express-session";
+import MongoStore from "connect-mongo";
 
 import { authRouter } from "./routes/auth.js";
 import { apiRouter } from "./routes/api.js";
@@ -62,10 +63,13 @@ app.use(
     saveUninitialized: false,
 
     name: "gmail.sid",
+    store: MongoStore.create({
+      mongoUrl: process.env.MONGO_URI,
+    }),
 
     cookie: {
       httpOnly: true,
-      secure: false,
+      secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       maxAge: 24 * 60 * 60 * 1000,
     },
