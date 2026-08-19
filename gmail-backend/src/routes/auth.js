@@ -20,10 +20,14 @@ const oauth2Client = new google.auth.OAuth2(
 // ===============================
 router.get("/google", (req, res) => {
   const redirectUrl = req.query.redirect;
+  const frontend =
+    process.env.FRONTEND_URL ||
+    "http://localhost:5173";
 
   if (
     redirectUrl &&
-    redirectUrl.startsWith("http://localhost")
+    (redirectUrl.startsWith(frontend) ||
+      redirectUrl.startsWith("http://localhost"))
   ) {
     req.session.redirectAfterAuth = redirectUrl;
   }
@@ -184,17 +188,22 @@ router.get("/google/callback", async (req, res) => {
         process.env.FRONTEND_URL ||
         "http://localhost:5173";
 
-      const redirectUrl =
-        `${frontend}/?gmail_connected=true&email=${encodeURIComponent(
-          email
-        )}`;
+      const baseRedirectUrl =
+        req.session.redirectAfterAuth ||
+        `${frontend}/dashboard`;
+
+      req.session.redirectAfterAuth = undefined;
+
+      const redirectUrl = new URL(baseRedirectUrl);
+      redirectUrl.searchParams.set("gmail_connected", "true");
+      redirectUrl.searchParams.set("email", email);
 
       console.log(
         "Redirecting to:",
-        redirectUrl
+        redirectUrl.toString()
       );
 
-      res.redirect(redirectUrl);
+      res.redirect(redirectUrl.toString());
     });
 
   } catch (error) {
