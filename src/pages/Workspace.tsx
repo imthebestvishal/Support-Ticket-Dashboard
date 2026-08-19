@@ -972,8 +972,11 @@ function Workspace() {
   }
 
   function connectGmail() {
+    const redirectUrl =
+      `${window.location.origin}${window.location.pathname}#/dashboard`;
+
     window.location.href =
-      `${API}/auth/google`;
+      `${API}/auth/google?redirect=${encodeURIComponent(redirectUrl)}`;
   }
 
   function createTicket(

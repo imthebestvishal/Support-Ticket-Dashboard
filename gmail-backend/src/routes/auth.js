@@ -194,16 +194,20 @@ router.get("/google/callback", async (req, res) => {
 
       req.session.redirectAfterAuth = undefined;
 
-      const redirectUrl = new URL(baseRedirectUrl);
-      redirectUrl.searchParams.set("gmail_connected", "true");
-      redirectUrl.searchParams.set("email", email);
+      const separator =
+        baseRedirectUrl.includes("?") ? "&" : "?";
+
+      const redirectUrl =
+        `${baseRedirectUrl}${separator}gmail_connected=true&email=${encodeURIComponent(
+          email
+        )}`;
 
       console.log(
         "Redirecting to:",
-        redirectUrl.toString()
+        redirectUrl
       );
 
-      res.redirect(redirectUrl.toString());
+      res.redirect(redirectUrl);
     });
 
   } catch (error) {
