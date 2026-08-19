@@ -1,10 +1,11 @@
 # Gmail API Backend
 
-This is a Node.js + Express backend to connect Gmail, store messages in MongoDB, and analyze them with OpenAI.
+This is a Node.js + Express backend to connect Gmail, store messages in MongoDB, and analyze them with AgentRouter.
 
 ## Setup
 
 1. Copy `.env.example` to `.env` and fill in your values.
+   For AI analysis, set `AGENT_ROUTER_TOKEN` to your AgentRouter token. The default model is `gpt-5` and the default base URL is `https://agentrouter.org/v1`.
 2. Install dependencies:
    ```bash
    cd gmail-backend

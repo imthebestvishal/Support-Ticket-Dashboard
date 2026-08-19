@@ -2,10 +2,10 @@ import mongoose from "mongoose";
 import { Message } from "../models/message.js";
 import { listMemoryMessages } from "./memoryStore.js";
 import {
-  askOpenRouter,
-  getOpenRouterModel,
-  isOpenRouterConfigured,
-} from "./openRouterService.js";
+  askAgentRouter,
+  getAgentRouterModel,
+  isAgentRouterConfigured,
+} from "./agentRouterService.js";
 
 const assistantSystemPrompt = `
 You are SupportHub AI, an expert customer-support assistant.
@@ -112,7 +112,7 @@ function buildLocalAnswer(messages, question) {
   return `Here is a summary of the latest available tickets:\n\n${activeMessages
     .slice(0, 8)
     .map(formatTicket)
-    .join("\n\n")}\n\nNote: OpenRouter is not configured yet, so this is a local rule-based assistant response. Add a real OPENROUTER_API_KEY for richer AI answers.`;
+    .join("\n\n")}\n\nNote: AgentRouter is not configured yet, so this is a local rule-based assistant response. Add a real AGENT_ROUTER_TOKEN for richer AI answers.`;
 }
 
 export async function askAssistant(userId, question) {
@@ -193,7 +193,7 @@ If the requested information does not exist in the data, say:
 Do not make up missing information.
 `;
 
-  if (!isOpenRouterConfigured()) {
+  if (!isAgentRouterConfigured()) {
     return {
       answer: buildLocalAnswer(messages, question),
       ticketCount: messages.length,
@@ -202,7 +202,7 @@ Do not make up missing information.
   }
 
   try {
-    const answer = await askOpenRouter({
+    const answer = await askAgentRouter({
       messages: [
         {
           role: "system",
@@ -220,12 +220,12 @@ Do not make up missing information.
     return {
       answer,
       ticketCount: messages.length,
-      source: "openrouter",
-      model: getOpenRouterModel(),
+      source: "agentrouter",
+      model: getAgentRouterModel(),
     };
   } catch (error) {
     console.warn(
-      "OpenRouter assistant unavailable.",
+      "AgentRouter assistant unavailable.",
       error.message
     );
 

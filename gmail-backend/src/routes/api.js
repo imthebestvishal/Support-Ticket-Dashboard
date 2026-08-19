@@ -340,7 +340,7 @@ router.delete(
   }
 );
 
-// Fetch Gmail messages and analyze them with OpenRouter
+// Fetch Gmail messages and analyze them with AgentRouter
 router.post("/messages/fetch", requireAuth, async (req, res) => {
   try {
     const result = await fetchAndAnalyzeMessages(req.user._id);

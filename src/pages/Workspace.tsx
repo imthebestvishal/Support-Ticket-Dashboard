@@ -544,8 +544,8 @@ function Workspace() {
         data.answer || "No answer received."
       );
       setAssistantSource(
-        data.source === "openrouter"
-          ? `OpenRouter · ${data.model || "configured model"}`
+        data.source === "agentrouter"
+          ? `AgentRouter · ${data.model || "configured model"}`
           : data.source === "local-fallback"
           ? "Local fallback"
           : ""
@@ -1837,7 +1837,7 @@ function Workspace() {
 
                   <p className="muted">
                     View your Gmail conversations
-                    analyzed by OpenRouter AI.
+                    analyzed by AgentRouter AI.
                   </p>
                 </div>
 
@@ -2134,7 +2134,7 @@ function Workspace() {
                       <div className="spinner-green"></div>
                       <div>
                         <h3>Analyzing Gmail...</h3>
-                        <p>Gmail messages are being retrieved and analyzed by OpenRouter.</p>
+                        <p>Gmail messages are being retrieved and analyzed by AgentRouter.</p>
                       </div>
                     </div>
                     {[1, 2, 3].map((i) => (

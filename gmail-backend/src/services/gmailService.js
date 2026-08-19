@@ -6,7 +6,7 @@ import {
   getMemoryUser,
   saveMemoryMessage,
 } from "./memoryStore.js";
-import { askOpenRouter } from "./openRouterService.js";
+import { askAgentRouter } from "./agentRouterService.js";
 
 function calculatePriority(subject = "", body = "", sentiment = "") {
   const text = `${subject} ${body}`.toLowerCase();
@@ -141,7 +141,7 @@ technical issue, or action that requires attention.
 Keep summary short.
 `;
 
-  const text = await askOpenRouter({
+  const text = await askAgentRouter({
     messages: [
       {
         role: "system",
@@ -176,7 +176,7 @@ Keep summary short.
     };
   } catch (error) {
     console.error(
-      "OpenRouter returned invalid JSON:",
+      "AgentRouter returned invalid JSON:",
       text
     );
 
@@ -394,7 +394,7 @@ export async function fetchAndAnalyzeMessages(userId) {
 
       } catch (aiError) {
         console.error(
-          "OpenRouter analysis failed:",
+          "AgentRouter analysis failed:",
           aiError.message
         );
 
