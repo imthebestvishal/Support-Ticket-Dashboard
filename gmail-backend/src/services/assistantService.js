@@ -112,7 +112,7 @@ function buildLocalAnswer(messages, question) {
   return `Here is a summary of the latest available tickets:\n\n${activeMessages
     .slice(0, 8)
     .map(formatTicket)
-    .join("\n\n")}\n\nNote: This is a local rule-based assistant response. Configure AgentRouter for richer AI answers.`;
+    .join("\n\n")}`;
 }
 
 export async function askAssistant(userId, question) {
