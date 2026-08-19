@@ -190,7 +190,7 @@ router.get("/google/callback", async (req, res) => {
 
       const baseRedirectUrl =
         req.session.redirectAfterAuth ||
-        `${frontend}/dashboard`;
+        `${frontend}/#/dashboard`;
 
       req.session.redirectAfterAuth = undefined;
 
