@@ -5,6 +5,33 @@ const AGENT_ROUTER_BASE_URL =
   process.env.AGENT_ROUTER_BASE_URL ||
   "https://agentrouter.org/v1";
 
+function cleanErrorText(text) {
+  if (!text) {
+    return "";
+  }
+
+  if (text.trim().startsWith("<")) {
+    const blockMessage = text.match(/"block_message":"([^"]+)"/);
+
+    if (blockMessage?.[1]) {
+      return blockMessage[1];
+    }
+
+    return "AgentRouter returned an HTML error page instead of JSON.";
+  }
+
+  try {
+    const data = JSON.parse(text);
+    return (
+      data?.error?.message ||
+      data?.message ||
+      text
+    );
+  } catch {
+    return text;
+  }
+}
+
 export function isAgentRouterConfigured() {
   return (
     AGENT_ROUTER_TOKEN &&
@@ -33,7 +60,9 @@ export async function askAgentRouter({
       method: "POST",
       headers: {
         Authorization: `Bearer ${AGENT_ROUTER_TOKEN}`,
+        Accept: "application/json",
         "Content-Type": "application/json",
+        "User-Agent": "SupportHub/1.0",
         "HTTP-Referer": process.env.FRONTEND_URL || "http://localhost:5173",
         "X-Title": "SupportHub",
       },
@@ -54,7 +83,7 @@ export async function askAgentRouter({
   );
 
   if (!response.ok) {
-    const errorText = await response.text();
+    const errorText = cleanErrorText(await response.text());
 
     if (response.status === 429) {
       throw new Error(
@@ -65,6 +94,12 @@ export async function askAgentRouter({
     if (response.status === 401 || response.status === 403) {
       throw new Error(
         "AgentRouter token is invalid or does not have permission to use this model."
+      );
+    }
+
+    if (response.status === 405) {
+      throw new Error(
+        `AgentRouter rejected the request. Check that AGENT_ROUTER_BASE_URL is https://agentrouter.org/v1 and that your token/model are enabled. Details: ${errorText}`
       );
     }
 

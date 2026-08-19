@@ -112,7 +112,7 @@ function buildLocalAnswer(messages, question) {
   return `Here is a summary of the latest available tickets:\n\n${activeMessages
     .slice(0, 8)
     .map(formatTicket)
-    .join("\n\n")}\n\nNote: AgentRouter is not configured yet, so this is a local rule-based assistant response. Add a real AGENT_ROUTER_TOKEN for richer AI answers.`;
+    .join("\n\n")}\n\nNote: This is a local rule-based assistant response. Configure AgentRouter for richer AI answers.`;
 }
 
 export async function askAssistant(userId, question) {
@@ -229,6 +229,11 @@ Do not make up missing information.
       error.message
     );
 
-    throw error;
+    return {
+      answer: buildLocalAnswer(messages, question),
+      ticketCount: messages.length,
+      source: "local-fallback",
+      providerError: error.message,
+    };
   }
 }

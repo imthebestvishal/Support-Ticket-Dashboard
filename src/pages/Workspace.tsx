@@ -547,7 +547,9 @@ function Workspace() {
         data.source === "agentrouter"
           ? `AgentRouter · ${data.model || "configured model"}`
           : data.source === "local-fallback"
-          ? "Local fallback"
+          ? data.providerError
+            ? "Local fallback · AgentRouter unavailable"
+            : "Local fallback"
           : ""
       );
     } catch (error) {
