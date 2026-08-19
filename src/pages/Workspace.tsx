@@ -973,7 +973,7 @@ function Workspace() {
 
   function connectGmail() {
     const redirectUrl =
-      `${window.location.origin}${window.location.pathname}#/dashboard`;
+      `${window.location.origin}/#/dashboard`;
 
     window.location.href =
       `${API}/auth/google?redirect=${encodeURIComponent(redirectUrl)}`;
