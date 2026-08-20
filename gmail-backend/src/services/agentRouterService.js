@@ -1,5 +1,5 @@
 const DEFAULT_AGENT_ROUTER_MODEL = "gpt-5.5";
-const DEFAULT_AGENT_ROUTER_BASE_URL = "https://co.agentrouter.org/v1";
+const DEFAULT_AGENT_ROUTER_BASE_URL = "https://agentrouter.org/v1";
 const LAST_PROVIDER_STATUS = {
   httpStatus: null,
   contentType: "",
@@ -75,9 +75,9 @@ function getAgentRouterBaseUrl() {
     .replace(/\/+$/, "");
 
   if (
-    configuredBaseUrl === "https://agentrouter.org/v1" ||
     configuredBaseUrl === "http://agentrouter.org/v1" ||
     configuredBaseUrl === "agentrouter.org/v1" ||
+    configuredBaseUrl === "https://co.agentrouter.org/v1" ||
     configuredBaseUrl === "co.agentrouter.org/v1"
   ) {
     return DEFAULT_AGENT_ROUTER_BASE_URL;
@@ -88,6 +88,31 @@ function getAgentRouterBaseUrl() {
   }
 
   return configuredBaseUrl;
+}
+
+function toResponseInput(messages) {
+  return messages.map((message) => ({
+    role: message.role === "system" ? "developer" : message.role,
+    content: [
+      {
+        type: "input_text",
+        text: message.content || "",
+      },
+    ],
+  }));
+}
+
+function extractResponseText(data) {
+  if (data?.output_text?.trim()) {
+    return data.output_text.trim();
+  }
+
+  const parts = data?.output
+    ?.flatMap((item) => item?.content || [])
+    ?.map((content) => content?.text || "")
+    ?.filter(Boolean);
+
+  return parts?.join("\n").trim() || "";
 }
 
 export function isAgentRouterConfigured() {
@@ -145,7 +170,7 @@ async function requestAgentRouter({
   const baseUrl = getAgentRouterBaseUrl();
 
   const response = await fetch(
-    `${baseUrl}/chat/completions`,
+    `${baseUrl}/responses`,
     {
       method: "POST",
       headers: {
@@ -158,13 +183,15 @@ async function requestAgentRouter({
       },
       body: JSON.stringify({
         model,
-        messages,
+        input: toResponseInput(messages),
         temperature,
-        max_tokens: maxTokens,
+        max_output_tokens: maxTokens,
         ...(json
           ? {
-              response_format: {
-                type: "json_object",
+              text: {
+                format: {
+                  type: "json_object",
+                },
               },
             }
           : {}),
@@ -229,7 +256,7 @@ async function requestAgentRouter({
   }
 
   const data = await response.json();
-  const text = data?.choices?.[0]?.message?.content?.trim();
+  const text = extractResponseText(data);
 
   if (!text) {
     throw new Error("AgentRouter returned an empty response");
