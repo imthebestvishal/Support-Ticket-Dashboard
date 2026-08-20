@@ -1,7 +1,11 @@
 const DEFAULT_AGENT_ROUTER_MODEL = "gpt-5.5";
 const DEFAULT_AGENT_ROUTER_BASE_URL = "https://agentrouter.org/v1";
 const AGENT_ROUTER_CHAT_BASE_URL = "https://co.agentrouter.org/v1";
+const DEFAULT_OPENROUTER_MODEL = "openai/gpt-4o-mini";
+const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 const LAST_PROVIDER_STATUS = {
+  provider: "",
+  model: "",
   httpStatus: null,
   contentType: "",
   error: "",
@@ -64,6 +68,19 @@ function cleanErrorText(text, contentType = "") {
 
 function getAgentRouterToken() {
   return process.env.AGENT_ROUTER_TOKEN || "";
+}
+
+function getOpenRouterToken() {
+  return process.env.OPENROUTER_API_KEY || "";
+}
+
+function getOpenRouterModel() {
+  const configuredModel =
+    process.env.OPENROUTER_MODEL || DEFAULT_OPENROUTER_MODEL;
+
+  return configuredModel === "openrouter/free"
+    ? DEFAULT_OPENROUTER_MODEL
+    : configuredModel;
 }
 
 function getAgentRouterBaseUrl() {
@@ -158,6 +175,7 @@ export function getAgentRouterModel() {
 
 export function getAgentRouterStatus() {
   const token = getAgentRouterToken();
+  const openRouterToken = getOpenRouterToken();
 
   return {
     configured: Boolean(isAgentRouterConfigured()),
@@ -166,6 +184,8 @@ export function getAgentRouterStatus() {
     wireApi: getAgentRouterWireApi(),
     tokenPresent: Boolean(token),
     tokenLength: token.length,
+    openRouterConfigured: !isPlaceholderToken(openRouterToken),
+    openRouterModel: getOpenRouterModel(),
     lastProviderStatus: {
       ...LAST_PROVIDER_STATUS,
     },
@@ -237,7 +257,14 @@ function buildRequests({
     : [responseRequest, chatRequest];
 }
 
-function rememberProviderStatus({ response, error = "" }) {
+function rememberProviderStatus({
+  response,
+  error = "",
+  provider = "agentrouter",
+  model = "",
+}) {
+  LAST_PROVIDER_STATUS.provider = provider;
+  LAST_PROVIDER_STATUS.model = model;
   LAST_PROVIDER_STATUS.httpStatus = response?.status || null;
   LAST_PROVIDER_STATUS.contentType =
     response?.headers?.get("content-type") || "";
@@ -362,7 +389,95 @@ async function requestAgentRouter({
 }
 
 export async function askAgentRouter(options) {
-  return requestAgentRouter(options);
+  try {
+    return await requestAgentRouter(options);
+  } catch (error) {
+    if (!isPlaceholderToken(getOpenRouterToken())) {
+      console.warn(
+        "AgentRouter unavailable; trying OpenRouter fallback.",
+        error.message
+      );
+
+      return requestOpenRouter(options);
+    }
+
+    throw error;
+  }
+}
+
+async function requestOpenRouter({
+  messages,
+  temperature = 0.2,
+  maxTokens = 1200,
+  json = false,
+}) {
+  const token = getOpenRouterToken();
+  const model = getOpenRouterModel();
+  const response = await fetch(
+    `${OPENROUTER_BASE_URL}/chat/completions`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        "HTTP-Referer": process.env.FRONTEND_URL || "http://localhost:5173",
+        "X-Title": "SupportHub",
+      },
+      body: JSON.stringify({
+        model,
+        messages: toChatMessages(messages),
+        temperature,
+        max_tokens: maxTokens,
+        ...(json
+          ? {
+              response_format: {
+                type: "json_object",
+              },
+            }
+          : {}),
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const contentType = response.headers.get("content-type") || "";
+    const errorText = cleanErrorText(await response.text(), contentType);
+    const providerDetails = `OpenRouter ${OPENROUTER_BASE_URL}/chat/completions returned HTTP ${response.status}; content-type: ${
+      contentType || "unknown"
+    }; details: ${errorText}`;
+
+    rememberProviderStatus({
+      response,
+      error: providerDetails,
+      provider: "openrouter",
+      model,
+    });
+
+    throw new Error(providerDetails);
+  }
+
+  const data = await response.json();
+  const text = extractChatText(data);
+
+  if (!text) {
+    rememberProviderStatus({
+      response,
+      error: "OpenRouter returned an empty response",
+      provider: "openrouter",
+      model,
+    });
+
+    throw new Error("OpenRouter returned an empty response");
+  }
+
+  rememberProviderStatus({
+    response,
+    provider: "openrouter",
+    model,
+  });
+
+  return text;
 }
 
 export async function probeAgentRouter() {

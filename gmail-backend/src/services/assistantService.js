@@ -220,11 +220,18 @@ Do not make up missing information.
       maxTokens: 1200,
     });
 
+    const providerStatus = getAgentRouterStatus();
+    const provider =
+      providerStatus.lastProviderStatus.provider || "agentrouter";
+
     return {
       answer,
       ticketCount: messages.length,
-      source: "agentrouter",
-      model: getAgentRouterModel(),
+      source: provider,
+      model:
+        providerStatus.lastProviderStatus.model ||
+        getAgentRouterModel(),
+      providerStatus,
     };
   } catch (error) {
     console.warn(
