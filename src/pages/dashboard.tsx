@@ -447,12 +447,17 @@ export default function Dashboard() {
     initialize();
 
     const settings = getWorkspaceSettings();
+    let timer: ReturnType<typeof setInterval> | undefined;
     if (settings.autoRefreshInterval > 0) {
-      const timer = setInterval(() => {
+      timer = setInterval(() => {
         loadMessages();
       }, settings.autoRefreshInterval * 1000);
-      return () => clearInterval(timer);
     }
+
+    return () => {
+      if (timer) clearInterval(timer);
+      if (bellTimerRef.current) clearTimeout(bellTimerRef.current);
+    };
   }, []);
 
   const selectedTicket =
@@ -1733,10 +1738,19 @@ export default function Dashboard() {
               <textarea
                 value={editedReply}
                 onChange={(event) => setEditedReply(event.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    if (!actionLoading && !refining) {
+                      saveReply();
+                    }
+                  }
+                }}
                 rows={16}
                 className="reply-editor"
                 disabled={actionLoading || refining}
-                placeholder="Compose or edit your reply to the customer..."
+                placeholder="Compose or edit your reply to the customer... (Enter to save, Shift+Enter for new line)"
+                aria-label="Edit reply draft. Press Enter to save, Shift+Enter for new line."
               />
             )}
 
@@ -1991,6 +2005,141 @@ export default function Dashboard() {
                   onClick={() => setPreviewArticle(null)}
                 >
                   Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* ================================================================
+            MANUAL CREATE TICKET MODAL
+           ================================================================ */}
+        {showCreateTicketModal && (
+          <div
+            className="create-ticket-modal-backdrop"
+            onClick={() => setShowCreateTicketModal(false)}
+          >
+            <div
+              className="create-ticket-modal"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="create-ticket-dialog-title"
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: "6px",
+                }}
+              >
+                <h3 id="create-ticket-dialog-title">Create New Support Ticket</h3>
+                <button
+                  className="secondary-button"
+                  style={{ padding: "4px 10px" }}
+                  onClick={() => setShowCreateTicketModal(false)}
+                  aria-label="Close create ticket dialog"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <p style={{ fontSize: "13px", color: "#64748b", margin: "0 0 4px" }}>
+                Manually create a support ticket. It will be added to your workspace for triage.
+              </p>
+
+              <div className="modal-form-grid">
+                <label>
+                  Subject
+                  <input
+                    type="text"
+                    value={createTicketForm.subject}
+                    onChange={(e) =>
+                      setCreateTicketForm((f) => ({ ...f, subject: e.target.value }))
+                    }
+                    placeholder="e.g. Billing issue with last invoice"
+                    autoFocus
+                  />
+                </label>
+
+                <label>
+                  From (Customer Email)
+                  <input
+                    type="email"
+                    value={createTicketForm.sender}
+                    onChange={(e) =>
+                      setCreateTicketForm((f) => ({ ...f, sender: e.target.value }))
+                    }
+                    placeholder="customer@example.com"
+                  />
+                </label>
+
+                <div className="form-field-row">
+                  <label>
+                    Priority
+                    <select
+                      value={createTicketForm.priority}
+                      onChange={(e) =>
+                        setCreateTicketForm((f) => ({
+                          ...f,
+                          priority: e.target.value as TicketPriority,
+                        }))
+                      }
+                    >
+                      <option value="Low">Low</option>
+                      <option value="Medium">Medium</option>
+                      <option value="High">High</option>
+                      <option value="Urgent">Urgent</option>
+                    </select>
+                  </label>
+
+                  <label>
+                    Category
+                    <select
+                      value={createTicketForm.category}
+                      onChange={(e) =>
+                        setCreateTicketForm((f) => ({ ...f, category: e.target.value }))
+                      }
+                    >
+                      <option value="General">General</option>
+                      <option value="Technical">Technical</option>
+                      <option value="Billing">Billing</option>
+                      <option value="Account">Account</option>
+                      <option value="Feature Request">Feature Request</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </label>
+                </div>
+
+                <label>
+                  Message Body
+                  <textarea
+                    value={createTicketForm.body}
+                    onChange={(e) =>
+                      setCreateTicketForm((f) => ({ ...f, body: e.target.value }))
+                    }
+                    rows={5}
+                    placeholder="Describe the customer's issue..."
+                  />
+                </label>
+              </div>
+
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => setShowCreateTicketModal(false)}
+                  disabled={creatingTicket}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={handleCreateTicket}
+                  disabled={creatingTicket}
+                >
+                  {creatingTicket ? "Creating..." : "Create Ticket"}
                 </button>
               </div>
             </div>
