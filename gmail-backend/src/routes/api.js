@@ -4,6 +4,7 @@ import { User } from "../models/user.js";
 import mongoose from "mongoose";
 import { Message } from "../models/message.js";
 import {
+  createCalendarEvent,
   fetchAndAnalyzeMessages,
   generateReplyDraft,
   sendReplyEmail,
@@ -396,6 +397,7 @@ router.post("/messages/:id/draft-reply", requireAuth, async (req, res) => {
             {
               $set: {
                 replyDraft: draft,
+                replyDraftProvider: draftResult.source,
               },
             },
             {
@@ -404,11 +406,13 @@ router.post("/messages/:id/draft-reply", requireAuth, async (req, res) => {
           )
         : updateMemoryMessage(req.user._id.toString(), req.params.id, {
             replyDraft: draft,
+            replyDraftProvider: draftResult.source,
           });
 
     res.send({
       draft,
       source: draftResult.source,
+      model: draftResult.model || "",
       providerError: draftResult.providerError || "",
       message: updatedMessage,
     });
@@ -417,6 +421,55 @@ router.post("/messages/:id/draft-reply", requireAuth, async (req, res) => {
 
     res.status(500).send({
       error: error.message || "Failed to generate reply draft",
+    });
+  }
+});
+
+router.patch("/messages/:id/reply-draft", requireAuth, async (req, res) => {
+  try {
+    const replyDraft = String(req.body?.replyDraft || "").trim();
+
+    if (!replyDraft) {
+      return res.status(400).send({
+        error: "Reply draft is required",
+      });
+    }
+
+    const updates = {
+      replyDraft,
+      replyDraftProvider: req.body?.source || "manual",
+    };
+    const updatedMessage =
+      mongoose.connection.readyState === 1
+        ? await Message.findOneAndUpdate(
+            messageQuery(req.user._id, req.params.id),
+            {
+              $set: updates,
+            },
+            {
+              new: true,
+            }
+          )
+        : updateMemoryMessage(
+            req.user._id.toString(),
+            req.params.id,
+            updates
+          );
+
+    if (!updatedMessage || updatedMessage.deletedAt) {
+      return res.status(404).send({
+        error: "Message not found",
+      });
+    }
+
+    res.send({
+      message: updatedMessage,
+    });
+  } catch (error) {
+    console.error("Failed to save reply draft:", error);
+
+    res.status(500).send({
+      error: error.message || "Failed to save reply draft",
     });
   }
 });
@@ -488,6 +541,67 @@ router.post("/messages/:id/send-reply", requireAuth, async (req, res) => {
 
     res.status(500).send({
       error: error.message || "Failed to send reply",
+    });
+  }
+});
+
+router.post("/messages/:id/calendar-event", requireAuth, async (req, res) => {
+  try {
+    const message =
+      mongoose.connection.readyState === 1
+        ? await Message.findOne(messageQuery(req.user._id, req.params.id))
+        : updateMemoryMessage(req.user._id.toString(), req.params.id, {});
+
+    if (!message || message.deletedAt) {
+      return res.status(404).send({
+        error: "Message not found",
+      });
+    }
+
+    if (message.calendarEventId) {
+      return res.status(409).send({
+        error: "Calendar event already exists for this ticket.",
+        calendarEventId: message.calendarEventId,
+        calendarEventLink: message.calendarEventLink || "",
+      });
+    }
+
+    const event = await createCalendarEvent({
+      user: req.user,
+      message,
+    });
+    const updates = {
+      calendarEventId: event.id || "",
+      calendarEventLink: event.htmlLink || "",
+    };
+    const updatedMessage =
+      mongoose.connection.readyState === 1
+        ? await Message.findOneAndUpdate(
+            messageQuery(req.user._id, req.params.id),
+            {
+              $set: updates,
+            },
+            {
+              new: true,
+            }
+          )
+        : updateMemoryMessage(
+            req.user._id.toString(),
+            req.params.id,
+            updates
+          );
+
+    res.send({
+      calendarEvent: event,
+      message: updatedMessage,
+    });
+  } catch (error) {
+    console.error("Failed to create calendar event:", error);
+
+    res.status(500).send({
+      error:
+        error.message ||
+        "Failed to create calendar event. Reconnect Gmail and approve Calendar access, then try again.",
     });
   }
 });

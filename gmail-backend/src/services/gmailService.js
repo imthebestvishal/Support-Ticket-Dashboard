@@ -6,7 +6,11 @@ import {
   getMemoryUser,
   saveMemoryMessage,
 } from "./memoryStore.js";
-import { askAgentRouter } from "./agentRouterService.js";
+import {
+  askAgentRouter,
+  getAgentRouterModel,
+  getAgentRouterStatus,
+} from "./agentRouterService.js";
 
 const VALID_CATEGORIES = [
   "Technical",
@@ -257,7 +261,12 @@ Return ONLY valid JSON in exactly this format:
   "sentiment": "Neutral",
   "suggestedResponse": "Natural professional reply specific to this email",
   "isTicket": true,
-  "classificationReason": "One short reason for category and priority"
+  "classificationReason": "One short reason for category and priority",
+  "eventTitle": "",
+  "eventDateTime": "",
+  "eventVenue": "",
+  "eventConfidence": 0,
+  "eventNotes": ""
 }
 
 Rules:
@@ -297,6 +306,13 @@ isTicket may be false for pure newsletters, promotions, social notifications, re
 Keep summary short but specific. Avoid generic summaries.
 The suggestedResponse must sound human and natural, not a repeated template.
 Do not say "we have received your request and will review it shortly" unless there are no useful details.
+
+Event extraction:
+- If the email explicitly contains an event, meeting, interview, webinar, deadline, appointment, exam, venue, location, or schedule, extract event details.
+- eventDateTime must be an ISO-like date/time string only when a concrete date or date+time is present. Leave it empty for vague dates like "soon", "later", or "next steps".
+- eventVenue should be the physical venue, online meeting location, city, or platform if explicitly present.
+- eventConfidence must be 0 when no event exists, 0.4 for partial event details, 0.7+ for a clear date or venue, and 0.9+ only when date/time and venue/title are clear.
+- Do not invent event fields.
 `;
 
   const text = await askAgentRouter({
@@ -341,6 +357,14 @@ Do not say "we have received your request and will review it shortly" unless the
         "",
       classificationReason:
         parsed.classificationReason || "",
+      eventTitle: parsed.eventTitle || "",
+      eventDateTime: parsed.eventDateTime || "",
+      eventVenue: parsed.eventVenue || "",
+      eventConfidence:
+        typeof parsed.eventConfidence === "number"
+          ? Math.max(0, Math.min(1, parsed.eventConfidence))
+          : 0,
+      eventNotes: parsed.eventNotes || "",
       isTicket:
         typeof parsed.isTicket === "boolean"
           ? parsed.isTicket
@@ -362,6 +386,11 @@ Do not say "we have received your request and will review it shortly" unless the
       suggestedResponse: "",
       classificationReason:
         "Fallback classification used because AgentRouter returned invalid JSON.",
+      eventTitle: "",
+      eventDateTime: "",
+      eventVenue: "",
+      eventConfidence: 0,
+      eventNotes: "",
       isTicket: true,
     };
   }
@@ -468,6 +497,18 @@ function getHeader(headers, name) {
   return header?.value || "";
 }
 
+function parseEventDateTime(value) {
+  const text = String(value || "").trim();
+
+  if (!text) {
+    return null;
+  }
+
+  const parsed = new Date(text);
+
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 function summarizeForFallback(message) {
   const summary = (message.summary || "").trim();
 
@@ -560,7 +601,7 @@ export async function generateReplyDraft(message) {
         {
           role: "system",
           content:
-            "You write natural, professional email replies. Return only the email body, with no markdown and no subject line. Every draft must be specific to this exact email and should avoid sounding like a reusable support template.",
+            "You write polished customer-support email drafts. Return only the email body, with no markdown and no subject line. The draft must be specific, structured, warm, and ready for a human agent to edit/send.",
         },
         {
           role: "user",
@@ -582,10 +623,12 @@ ${message.suggestedResponse || "No prior suggested response"}
 Requirements:
 - Use a natural professional tone.
 - Mention the specific concern from the subject, summary, or body.
-- Vary the wording; do not use the same structure for every email.
+- Start with a direct greeting when the customer name is available.
+- Use short paragraphs like a professional support response.
+- Include a clear next step based only on available information.
 - Avoid generic lines like "we have received your request and will review it shortly."
 - Do not promise actions that are not stated.
-- Keep it concise and ready for a human agent to edit/send.
+- Keep it concise, credible, and ready for a human agent to edit/send.
 `,
         },
       ],
@@ -593,9 +636,16 @@ Requirements:
       maxTokens: 700,
     });
 
+    const status = getAgentRouterStatus();
+    const provider =
+      status.lastProviderStatus.provider || "agentrouter";
+
     return {
       draft,
-      source: "agentrouter",
+      source: provider,
+      model:
+        status.lastProviderStatus.model ||
+        getAgentRouterModel(),
     };
   } catch (error) {
     console.warn(
@@ -655,6 +705,56 @@ export async function sendReplyEmail({ user, message, replyBody }) {
   }
 
   return response.data;
+}
+
+export async function createCalendarEvent({ user, message }) {
+  if (!message.eventDateTime) {
+    throw new Error("This ticket does not have a usable event date.");
+  }
+
+  const oauth2Client = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    process.env.GOOGLE_REDIRECT_URI
+  );
+
+  oauth2Client.setCredentials({
+    access_token: user.accessToken,
+    refresh_token: user.refreshToken,
+    expiry_date: user.tokenExpiry,
+  });
+
+  const calendar = google.calendar({
+    version: "v3",
+    auth: oauth2Client,
+  });
+  const start = new Date(message.eventDateTime);
+  const end = new Date(start.getTime() + 60 * 60 * 1000);
+  const event = await calendar.events.insert({
+    calendarId: "primary",
+    requestBody: {
+      summary:
+        message.eventTitle ||
+        message.subject ||
+        "Support follow-up",
+      location: message.eventVenue || "",
+      description: [
+        message.eventNotes,
+        message.summary,
+        message.subject ? `Source email: ${message.subject}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
+      start: {
+        dateTime: start.toISOString(),
+      },
+      end: {
+        dateTime: end.toISOString(),
+      },
+    },
+  });
+
+  return event.data;
 }
 
 /*
@@ -817,6 +917,21 @@ export async function fetchAndAnalyzeMessages(userId) {
 
         classificationReason:
           analysis.classificationReason || "",
+
+        eventTitle:
+          analysis.eventTitle || "",
+
+        eventDateTime:
+          parseEventDateTime(analysis.eventDateTime),
+
+        eventVenue:
+          analysis.eventVenue || "",
+
+        eventConfidence:
+          analysis.eventConfidence || 0,
+
+        eventNotes:
+          analysis.eventNotes || "",
 
         isTicket:
           analysis.isTicket,

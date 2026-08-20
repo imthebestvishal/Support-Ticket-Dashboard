@@ -93,6 +93,46 @@ const messageSchema = new mongoose.Schema(
       default: "",
     },
 
+    replyDraftProvider: {
+      type: String,
+      default: "",
+    },
+
+    eventTitle: {
+      type: String,
+      default: "",
+    },
+
+    eventDateTime: {
+      type: Date,
+      default: null,
+    },
+
+    eventVenue: {
+      type: String,
+      default: "",
+    },
+
+    eventConfidence: {
+      type: Number,
+      default: 0,
+    },
+
+    eventNotes: {
+      type: String,
+      default: "",
+    },
+
+    calendarEventId: {
+      type: String,
+      default: "",
+    },
+
+    calendarEventLink: {
+      type: String,
+      default: "",
+    },
+
     sentReply: {
       type: String,
       default: "",

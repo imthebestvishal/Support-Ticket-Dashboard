@@ -30,9 +30,10 @@ This is a Node.js + Express backend to connect Gmail, store messages in MongoDB,
    ```text
    https://www.googleapis.com/auth/gmail.readonly
    https://www.googleapis.com/auth/gmail.send
+   https://www.googleapis.com/auth/calendar.events
    ```
 
-Existing users must reconnect Gmail once after the send scope is added.
+Existing users must reconnect Gmail once after the send or calendar scope is added.
 
 ## API Endpoints
 

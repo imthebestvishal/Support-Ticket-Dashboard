@@ -21,15 +21,30 @@ type Ticket = {
   deletedAt?: string | null;
   expiresAt?: string | null;
   replyDraft?: string;
+  replyDraftProvider?: string;
   sentReply?: string;
   replySentAt?: string | null;
+  eventTitle?: string;
+  eventDateTime?: string | null;
+  eventVenue?: string;
+  eventConfidence?: number;
+  eventNotes?: string;
+  calendarEventId?: string;
+  calendarEventLink?: string;
 };
 
 type ReplyDraftState = {
   draft: string;
   source: string;
+  model?: string;
   loading: boolean;
   sending: boolean;
+  error: string;
+  success: string;
+};
+
+type CalendarActionState = {
+  loading: boolean;
   error: string;
   success: string;
 };
@@ -110,6 +125,55 @@ function daysRemaining(date?: string | null) {
   );
 
   return `${days} day${days === 1 ? "" : "s"}`;
+}
+
+function formatTicketDate(date?: string | null) {
+  if (!date) {
+    return "Not available";
+  }
+
+  const parsed = new Date(date);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return date;
+  }
+
+  return parsed.toLocaleString(undefined, {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function hasUsableEventDate(ticket: Ticket) {
+  if (!ticket.eventDateTime) {
+    return false;
+  }
+
+  return !Number.isNaN(new Date(ticket.eventDateTime).getTime());
+}
+
+function draftSourceLabel(source?: string) {
+  if (source === "openrouter") {
+    return "OpenRouter";
+  }
+
+  if (source === "agentrouter") {
+    return "AgentRouter";
+  }
+
+  if (source === "fallback") {
+    return "Fallback";
+  }
+
+  if (source === "manual") {
+    return "Saved Draft";
+  }
+
+  return "AI";
 }
 
 function getGreeting() {
@@ -484,6 +548,9 @@ function Workspace() {
 
   const [replyDrafts, setReplyDrafts] =
     useState<Record<string, ReplyDraftState>>({});
+
+  const [calendarActions, setCalendarActions] =
+    useState<Record<string, CalendarActionState>>({});
 
   const [assistantQuestion, setAssistantQuestion] =
     useState("");
@@ -1084,6 +1151,7 @@ function Workspace() {
         [id]: {
           draft: data.draft || "",
           source: data.source || "agentrouter",
+          model: data.model || "",
           loading: false,
           sending: false,
           error:
@@ -1111,6 +1179,135 @@ function Workspace() {
     }
   }
 
+  async function saveTicketReplyDraft(ticket: Ticket) {
+    const id = ticketId(ticket);
+    const state = id ? replyDrafts[id] : undefined;
+    const replyDraft = state?.draft?.trim() || "";
+
+    if (!id || !replyDraft) {
+      return;
+    }
+
+    setReplyDrafts((previous) => ({
+      ...previous,
+      [id]: {
+        ...previous[id],
+        sending: true,
+        error: "",
+        success: "",
+      },
+    }));
+
+    try {
+      const response = await fetch(
+        `${API}/api/messages/${encodeURIComponent(id)}/reply-draft`,
+        {
+          method: "PATCH",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            ...getGmailAuthHeaders(),
+          },
+          body: JSON.stringify({
+            replyDraft,
+            source: state?.source || "manual",
+          }),
+        }
+      );
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to save draft");
+      }
+
+      if (data.message) {
+        updateTicketEverywhere(data.message);
+      }
+
+      setReplyDrafts((previous) => ({
+        ...previous,
+        [id]: {
+          ...previous[id],
+          sending: false,
+          success: "Draft saved.",
+        },
+      }));
+    } catch (error) {
+      setReplyDrafts((previous) => ({
+        ...previous,
+        [id]: {
+          ...previous[id],
+          sending: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : "Failed to save draft",
+        },
+      }));
+    }
+  }
+
+  async function addTicketEventToCalendar(ticket: Ticket) {
+    const id = ticketId(ticket);
+
+    if (!id) {
+      return;
+    }
+
+    setCalendarActions((previous) => ({
+      ...previous,
+      [id]: {
+        loading: true,
+        error: "",
+        success: "",
+      },
+    }));
+
+    try {
+      const response = await fetch(
+        `${API}/api/messages/${encodeURIComponent(id)}/calendar-event`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            ...getGmailAuthHeaders(),
+          },
+        }
+      );
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to add calendar event");
+      }
+
+      if (data.message) {
+        updateTicketEverywhere(data.message);
+      }
+
+      setCalendarActions((previous) => ({
+        ...previous,
+        [id]: {
+          loading: false,
+          error: "",
+          success: "Added to Google Calendar.",
+        },
+      }));
+    } catch (error) {
+      setCalendarActions((previous) => ({
+        ...previous,
+        [id]: {
+          loading: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : "Failed to add calendar event",
+          success: "",
+        },
+      }));
+    }
+  }
+
   function editReplyDraft(ticket: Ticket, draft: string) {
     const id = ticketId(ticket);
 
@@ -1123,6 +1320,7 @@ function Workspace() {
       [id]: {
         draft,
         source: previous[id]?.source || "",
+        model: previous[id]?.model || "",
         loading: false,
         sending: false,
         error: "",
@@ -2036,6 +2234,7 @@ function Workspace() {
                       (ticket) => {
                         const id = ticketId(ticket);
                         const replyState = replyDrafts[id];
+                        const calendarState = calendarActions[id];
                         const canReply =
                           Boolean(ticket.gmailMessageId) &&
                           hasUsableSender(ticket.sender);
@@ -2122,11 +2321,124 @@ function Workspace() {
 
                             </div>
 
+                            {(ticket.eventTitle ||
+                              ticket.eventVenue ||
+                              ticket.eventDateTime) && (
+                              <div className="ticket-event-panel">
+                                <div>
+                                  <strong>
+                                    {ticket.eventTitle || "Detected event"}
+                                  </strong>
+                                  <p>
+                                    {ticket.eventDateTime
+                                      ? formatTicketDate(ticket.eventDateTime)
+                                      : "Date not available"}
+                                  </p>
+                                  {ticket.eventVenue && (
+                                    <p>{ticket.eventVenue}</p>
+                                  )}
+                                  {ticket.eventNotes && (
+                                    <span>{ticket.eventNotes}</span>
+                                  )}
+                                </div>
+                                <div className="ticket-event-actions">
+                                  {ticket.calendarEventLink ? (
+                                    <a
+                                      className="outline-button compact-action"
+                                      href={ticket.calendarEventLink}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                    >
+                                      View Calendar Event
+                                    </a>
+                                  ) : hasUsableEventDate(ticket) ? (
+                                    <button
+                                      className="outline-button compact-action"
+                                      onClick={() =>
+                                        addTicketEventToCalendar(ticket)
+                                      }
+                                      disabled={calendarState?.loading}
+                                    >
+                                      {calendarState?.loading
+                                        ? "Adding..."
+                                        : "Add to Calendar"}
+                                    </button>
+                                  ) : null}
+                                  {calendarState?.error && (
+                                    <span className="ticket-event-error">
+                                      {calendarState.error}
+                                    </span>
+                                  )}
+                                  {calendarState?.success && (
+                                    <span className="ticket-event-success">
+                                      {calendarState.success}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
                             {replyState && (
-                              <div className="reply-draft-panel">
-                                <div className="reply-draft-header">
-                                  <strong>Email reply draft</strong>
-                                  <div className="reply-draft-header-meta">
+                              <div className="ai-draft-card">
+                                <div className="ai-draft-topbar">
+                                  <div>
+                                    <div className="ai-draft-title-row">
+                                      <span className="ai-draft-spark">✦</span>
+                                      <strong>AI Draft Response</strong>
+                                      <span className="ai-draft-badge">
+                                        Suggested
+                                      </span>
+                                    </div>
+                                    <p>
+                                      This is an AI-generated draft. Please
+                                      review and edit before sending.
+                                    </p>
+                                  </div>
+                                  <button
+                                    className="outline-button compact-action"
+                                    onClick={() => draftTicketReply(ticket)}
+                                    disabled={
+                                      replyState.loading ||
+                                      replyState.sending
+                                    }
+                                  >
+                                    Regenerate Draft
+                                  </button>
+                                </div>
+
+                                <div className="ai-draft-meta-grid">
+                                  <div className="ai-draft-meta-item">
+                                    <span>Ticket ID</span>
+                                    <strong>{id || "Unknown"}</strong>
+                                  </div>
+                                  <div className="ai-draft-meta-item">
+                                    <span>Priority</span>
+                                    <strong>{ticket.priority || "Medium"}</strong>
+                                  </div>
+                                  <div className="ai-draft-meta-item">
+                                    <span>Customer</span>
+                                    <strong>
+                                      {ticket.sender || "Unknown customer"}
+                                    </strong>
+                                  </div>
+                                  <div className="ai-draft-meta-item">
+                                    <span>Subject</span>
+                                    <strong>{ticket.subject || "No subject"}</strong>
+                                  </div>
+                                  <div className="ai-draft-meta-item">
+                                    <span>Date</span>
+                                    <strong>
+                                      {formatTicketDate(ticket.receivedAt)}
+                                    </strong>
+                                  </div>
+                                  <div className="ai-draft-meta-item">
+                                    <span>Category</span>
+                                    <strong>{ticket.category || "Other"}</strong>
+                                  </div>
+                                </div>
+
+                                <div className="ai-draft-body">
+                                  <div className="ai-draft-provider-row">
                                     <span
                                       className={`reply-source-tag ${
                                         replyState.source === "fallback"
@@ -2134,32 +2446,36 @@ function Workspace() {
                                           : "is-agentrouter"
                                       }`}
                                     >
-                                      {replyState.source === "fallback"
-                                        ? "Drafted locally"
-                                        : replyState.source === "agentrouter"
-                                        ? "Drafted by AgentRouter"
-                                        : "Generating draft"}
-                                    </span>
-                                    <span>
-                                      Review before sending through Gmail.
+                                      Drafted by{" "}
+                                      {draftSourceLabel(replyState.source)}
+                                      {replyState.model
+                                        ? ` · ${replyState.model}`
+                                        : ""}
                                     </span>
                                   </div>
+                                  <textarea
+                                    value={replyState.draft}
+                                    onChange={(event) =>
+                                      editReplyDraft(
+                                        ticket,
+                                        event.target.value
+                                      )
+                                    }
+                                    disabled={
+                                      replyState.loading ||
+                                      replyState.sending
+                                    }
+                                    rows={9}
+                                  />
                                 </div>
 
-                                <textarea
-                                  value={replyState.draft}
-                                  onChange={(event) =>
-                                    editReplyDraft(
-                                      ticket,
-                                      event.target.value
-                                    )
-                                  }
-                                  disabled={
-                                    replyState.loading ||
-                                    replyState.sending
-                                  }
-                                  rows={7}
-                                />
+                                <div className="ai-draft-notes">
+                                  <strong>Notes</strong>
+                                  <p>
+                                    This draft is generated from ticket details
+                                    and may require adjustments before sending.
+                                  </p>
+                                </div>
 
                                 {replyState.error && (
                                   <div className="reply-draft-error">
@@ -2195,6 +2511,20 @@ function Workspace() {
                                     }
                                   >
                                     Cancel
+                                  </button>
+
+                                  <button
+                                    className="outline-button"
+                                    onClick={() =>
+                                      saveTicketReplyDraft(ticket)
+                                    }
+                                    disabled={
+                                      replyState.loading ||
+                                      replyState.sending ||
+                                      !replyState.draft.trim()
+                                    }
+                                  >
+                                    Save as Draft
                                   </button>
 
                                   <button
