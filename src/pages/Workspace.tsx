@@ -20,6 +20,9 @@ type Ticket = {
   receivedAt?: string;
   deletedAt?: string | null;
   expiresAt?: string | null;
+  deadline?: string | null;
+  deadlineReason?: string;
+  deadlineStatus?: string;
   replyDraft?: string;
   sentReply?: string;
   replySentAt?: string | null;
@@ -448,6 +451,9 @@ function Workspace() {
   const [deletedMessages, setDeletedMessages] =
     useState<Ticket[]>([]);
 
+  const [deadlineNotifications, setDeadlineNotifications] =
+    useState<Ticket[]>([]);
+
   const [gmailStatus, setGmailStatus] =
     useState("Checking...");
 
@@ -732,6 +738,14 @@ function Workspace() {
         : [];
 
       setGmailMessages(messages);
+
+      const deadlineItems = messages.filter(
+        (mail: Ticket) =>
+          mail.deadlineStatus &&
+          mail.deadlineStatus !== "None"
+      );
+
+      setDeadlineNotifications(deadlineItems);
       await loadDeletedMessages();
 
       /*
@@ -1392,7 +1406,7 @@ function Workspace() {
         gmailSearch.toLowerCase();
 
       return gmailMessages.filter(
-        (mail) => {
+        (mail: Ticket) => {
           const priority =
             mail.priority || "Medium";
 
@@ -1434,20 +1448,20 @@ function Workspace() {
 
   const highGmail =
     gmailMessages.filter(
-      (mail) =>
+      (mail: Ticket) =>
         mail.priority === "High" ||
         mail.priority === "Urgent"
     ).length;
 
   const mediumGmail =
     gmailMessages.filter(
-      (mail) =>
+      (mail: Ticket) =>
         mail.priority === "Medium"
     ).length;
 
   const lowGmail =
     gmailMessages.filter(
-      (mail) =>
+      (mail: Ticket) =>
         mail.priority === "Low"
     ).length;
 
@@ -2655,7 +2669,7 @@ function Workspace() {
                   <div className="ticket-list">
 
                     {filteredGmailMessages.map(
-                      (mail) => (
+                      (mail: Ticket) => (
                         <div
                           className="ticket-row"
                           key={
@@ -2868,7 +2882,7 @@ function Workspace() {
                   <div className="ticket-list">
 
                     {deletedMessages.map(
-                      (mail) => (
+                      (mail: Ticket) => (
                         <div
                           className="ticket-row"
                           key={
@@ -3437,6 +3451,16 @@ function Workspace() {
 }
 
 export default Workspace;
+
+
+
+
+
+
+
+
+
+
 
 
 
