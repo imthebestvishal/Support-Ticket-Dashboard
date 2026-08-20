@@ -80,9 +80,127 @@ function App() {
     }
   }
 
+  useEffect(() => {
+    const params = new URLSearchParams(
+      window.location.search
+    );
+
+    const gmailConnected =
+      params.get("gmail_connected");
+
+    const gmailEmail =
+      params.get("email");
+
+    if (gmailConnected === "true") {
+
+      const connectedEmail =
+        gmailEmail
+          ? decodeURIComponent(gmailEmail)
+          : "";
+
+      setGmailStatus(
+        connectedEmail
+          ? `Connected: ${connectedEmail}`
+          : "Connected"
+      );
+
+      localStorage.setItem(
+        "gmailConnected",
+        "true"
+      );
+
+      if (connectedEmail) {
+        localStorage.setItem(
+          "gmailEmail",
+          connectedEmail
+        );
+      }
+
+      window.history.replaceState(
+        {},
+        document.title,
+        window.location.pathname
+      );
+    }
+
+    const savedConnection =
+      localStorage.getItem(
+        "gmailConnected"
+      );
+
+    const savedEmail =
+      localStorage.getItem(
+        "gmailEmail"
+      );
+
+    if (
+      savedConnection === "true"
+    ) {
+      setGmailStatus(
+        savedEmail
+          ? `Connected: ${savedEmail}`
+          : "Connected"
+      );
+    }
+
+  }, []);
+
+  async function analyzeGmail() {
+    try {
+
+      setGmailStatus(
+        "Analyzing Gmail..."
+      );
+
+      const response =
+        await fetch(
+          `${API}/api/messages/fetch`,
+          {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Content-Type":
+                "application/json"
+            }
+          }
+        );
+
+      const data =
+        await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+          "Failed to analyze Gmail"
+        );
+      }
+
+      setGmailStatus(
+        `Analyzed ${
+          data.count || 0
+        } emails`
+      );
+
+      console.log(
+        "Gmail analysis result:",
+        data
+      );
+
+    } catch (error) {
+
+      console.error(
+        "Gmail analysis error:",
+        error
+      );
+
+      setGmailStatus(
+        "Gmail analysis failed"
+      );
+    }
+  }
   async function checkGmail() {
     try {
-      const response = await fetch(`${API}/api/gmail/status`);
+      const response = await fetch(`${API}/api/gmail/status`, { credentials: "include" });
       const data = await response.json();
 
       if (data.error === "Not authenticated") {
@@ -379,7 +497,7 @@ function App() {
                         (window.location.href = `${API}/auth/google`)
                       }
                     >
-                      Connect Gmail →
+                      Analyze Gmail →
                     </button>
                   </div>
 
@@ -528,11 +646,15 @@ function App() {
               </div>
               <button
                 className="primary-button"
-                onClick={() =>
-                  (window.location.href = `${API}/auth/google`)
-                }
+                onClick={() => {
+                  if (gmailStatus.startsWith("Connected")) {
+                    analyzeGmail();
+                  } else {
+                    window.location.href = `${API}/auth/google`;
+                  }
+                }}
               >
-                Connect Gmail
+                {gmailStatus.startsWith("Connected") ? "✦ Fetch & Analyze Gmail" : "Connect Gmail"}
               </button>
             </section>
           )}
@@ -697,6 +819,11 @@ function App() {
 }
 
 export default App;
+
+
+
+
+
 
 
 

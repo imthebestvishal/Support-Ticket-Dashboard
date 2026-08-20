@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from "react";
+import React, { useRef, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 interface ScrollShowcaseProps {
@@ -167,7 +167,7 @@ export default function ScrollShowcase({ totalFrames, imagePath }: ScrollShowcas
 
       // B. Update canvas container opacity based on rendered frame
       const canvasOpacity = renderedProgress > 0.90 ? 1 - ((renderedProgress - 0.90) / 0.10) : 1;
-      const canvasSide = canvas.parentElement?.parentElement;
+      const canvasSide = canvas.parentElement?.parentElement; // .scroll-showcase-canvas-side
       if (canvasSide) {
         canvasSide.style.opacity = String(canvasOpacity);
       }
@@ -222,7 +222,7 @@ export default function ScrollShowcase({ totalFrames, imagePath }: ScrollShowcas
             </h1>
           </div>
 
-          {/* Centered Brand Signup Card overlay at the very end of scroll */}
+          {/* Step 4: Centered Brand Signup Card overlay at the very end of scroll */}
           <div className="scroll-showcase-signup-card">
             <p className="landing-kicker">AI email operations</p>
             <h1 className="hero-title">

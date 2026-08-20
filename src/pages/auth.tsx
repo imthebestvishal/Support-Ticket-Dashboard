@@ -1,14 +1,10 @@
-import React, { useEffect, useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+﻿import React, { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { authClient } from "../lib/auth";
 
 export default function Auth() {
   const navigate = useNavigate();
   const location = useLocation();
-
-  const from =
-    (location.state as { from?: { pathname?: string } })?.from?.pathname ||
-    "/dashboard";
 
   const [view, setView] = useState<"signin" | "signup">("signin");
   const [name, setName] = useState("");
@@ -21,6 +17,7 @@ export default function Auth() {
 
   useEffect(() => {
     const mode = new URLSearchParams(location.search).get("mode");
+
     if (mode === "signup" || mode === "signin") {
       setView(mode);
       setError("");
@@ -34,7 +31,7 @@ export default function Auth() {
         const result = await authClient.getSession();
 
         if (result?.data?.session) {
-          navigate(from, { replace: true });
+          navigate("/dashboard", { replace: true });
         }
       } catch (err) {
         console.error("Session check failed:", err);
@@ -42,7 +39,7 @@ export default function Auth() {
     };
 
     checkSession();
-  }, [navigate, from]);
+  }, [navigate]);
 
   const handleSubmit = async (
     event: React.FormEvent<HTMLFormElement>,
@@ -71,6 +68,7 @@ export default function Auth() {
 
         setView("signin");
         setPassword("");
+        navigate("/auth?mode=signin", { replace: true });
       } else {
         const result = await authClient.signIn.email({
           email,
@@ -83,7 +81,7 @@ export default function Auth() {
 
         setMessage("Signed in successfully.");
 
-        navigate(from, { replace: true });
+        navigate("/dashboard", { replace: true });
       }
     } catch (err: any) {
       console.error("Authentication error:", err);
@@ -110,8 +108,8 @@ export default function Auth() {
 
           <p className="page-copy">
             {view === "signin"
-              ? "Sign in to continue to your support operations workspace."
-              : "Create an account to get started with your support workspace."}
+              ? "Sign in to continue to your workspace."
+              : "Create an account to get started with your workspace."}
           </p>
         </div>
       </div>
@@ -165,7 +163,8 @@ export default function Auth() {
             <div className="form-grid">
               {view === "signup" && (
                 <label>
-                  Full Name
+                  Name
+
                   <input
                     type="text"
                     value={name}
@@ -173,14 +172,15 @@ export default function Auth() {
                       setName(event.target.value)
                     }
                     className="field"
-                    placeholder="Support Specialist"
+                    placeholder="Your name"
                     required
                   />
                 </label>
               )}
 
               <label>
-                Email Address
+                Email
+
                 <input
                   type="email"
                   value={email}
@@ -188,13 +188,14 @@ export default function Auth() {
                     setEmail(event.target.value)
                   }
                   className="field"
-                  placeholder="agent@company.com"
+                  placeholder="you@example.com"
                   required
                 />
               </label>
 
               <label>
                 Password
+
                 <input
                   type="password"
                   value={password}
@@ -211,15 +212,15 @@ export default function Auth() {
                 {loading
                   ? "Please wait..."
                   : view === "signin"
-                    ? "Login to Workspace"
-                    : "Create Agent Account"}
+                    ? "Login"
+                    : "Create Account"}
               </button>
             </div>
           </form>
         </div>
 
         <div className="auth-summary-card">
-          <h2>Support Workspace</h2>
+          <h2>Your workspace</h2>
 
           <div className="summary-item-row">
             <div>
@@ -235,13 +236,13 @@ export default function Auth() {
 
           <div className="summary-item-row">
             <div>
-              <span>AI Engine</span>
-              <strong>Gemini 2.5</strong>
+              <span>Account</span>
+              <strong>Personal</strong>
             </div>
 
             <div>
-              <span>Database</span>
-              <strong>MongoDB</strong>
+              <span>Status</span>
+              <strong>Ready</strong>
             </div>
           </div>
         </div>
@@ -249,3 +250,6 @@ export default function Auth() {
     </div>
   );
 }
+
+
+

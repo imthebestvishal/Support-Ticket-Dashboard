@@ -1,3 +1,5 @@
 node_modules/
 .env
 dist/
+src_old_final/
+public_old_final/

@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+﻿import { Routes, Route, Navigate } from "react-router-dom";
 
 import Home from "./pages/home";
 import Auth from "./pages/auth";
@@ -31,3 +31,6 @@ function App() {
 }
 
 export default App;
+
+
+

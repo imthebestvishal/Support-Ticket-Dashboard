@@ -1,17 +1,21 @@
-import React from "react";
+﻿import React from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter } from "react-router-dom";
 import App from "./App";
-import { ToastProvider } from "./components/Toast";
 import "./index.css";
+
+if (window.location.pathname === "/dashboard") {
+  window.history.replaceState(
+    null,
+    "",
+    `/#/dashboard${window.location.search}`,
+  );
+}
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <ToastProvider>
-        <App />
-      </ToastProvider>
-    </BrowserRouter>
-  </React.StrictMode>,
+    <App />
+  </React.StrictMode>
 );
+
+
 

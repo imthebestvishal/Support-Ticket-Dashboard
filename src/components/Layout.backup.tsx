@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+﻿import type { ReactNode } from "react";
 import { NavLink, Link } from "react-router-dom";
 
 const navItems = [
@@ -16,7 +16,7 @@ export default function Layout({ children }: LayoutProps) {
     <div className="app-shell">
       <header className="app-header">
         <div className="brand">
-          <div className="brand-mark">✨</div>
+          <div className="brand-mark">âœ¨</div>
           <div>
             <p className="brand-title">Neon Auth</p>
             <p className="brand-subtitle">Agentic dashboard workspace</p>
@@ -51,3 +51,6 @@ export default function Layout({ children }: LayoutProps) {
     </div>
   );
 }
+
+
+

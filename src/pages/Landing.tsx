@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import ScrollShowcase from "../components/ScrollShowcase";
-import { authClient } from "../lib/auth";
 
 type LandingTab = "Home" | "Features" | "Help Center" | "About";
 
@@ -37,12 +36,12 @@ const helpCenterFaqs = [
   {
     question: "How do I create and manage tickets?",
     answer:
-      "You can create manual tickets from the Workspace dashboard or convert incoming emails into tracked tickets with assigned priority levels (Urgent, High, Medium, Low) and live status tracking.",
+      "You can create manual tickets from the Workspace dashboard or convert incoming emails into tracked tickets with assigned priority levels (High, Medium, Low) and live status tracking.",
   },
   {
     question: "What capabilities does the AI Assistant offer?",
     answer:
-      "The integrated Gemini AI provides real-time intelligent insights over your support data, tone refinement (Formal, Friendly, Shorten, Simplify), and context-aware Knowledge Base integration.",
+      "The integrated AI Assistant provides real-time intelligent insights over your support data, answers natural language queries about ticket trends, and drafts instant response recommendations.",
   },
 ];
 
@@ -53,7 +52,7 @@ const projectHighlights = [
   },
   {
     title: "Real-Time Workspace",
-    desc: "Dynamic live metrics, stat breakdown cards, deadline tracking, and 3-column ticket workflow.",
+    desc: "Dynamic live metrics, stat breakdown cards, deadline tracking, and ticket workflow management.",
   },
   {
     title: "Theme Customization",
@@ -81,21 +80,6 @@ export default function Landing() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<LandingTab>("Home");
   const [isHeaderHidden, setIsHeaderHidden] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-
-  useEffect(() => {
-    async function checkAuth() {
-      try {
-        const sessionResult = await authClient.getSession();
-        if (sessionResult?.data?.session) {
-          setIsAuthenticated(true);
-        }
-      } catch {
-        setIsAuthenticated(false);
-      }
-    }
-    checkAuth();
-  }, []);
 
   const scrollToSection = (sectionId: string, tabName: LandingTab) => {
     setActiveTab(tabName);
@@ -191,20 +175,12 @@ export default function Landing() {
         </div>
 
         <nav className="landing-nav" aria-label="Landing navigation">
-          {isAuthenticated ? (
-            <Link to="/dashboard" className="nav-signup-button">
-              Open Workspace →
-            </Link>
-          ) : (
-            <>
-              <Link to="/auth?mode=signin" className="nav-signin-link">
-                Sign In
-              </Link>
-              <Link to="/auth?mode=signup" className="nav-signup-button">
-                Sign Up
-              </Link>
-            </>
-          )}
+          <Link to="/auth?mode=signin" className="nav-signin-link">
+            Sign In
+          </Link>
+          <Link to="/auth?mode=signup" className="nav-signup-button">
+            Sign Up
+          </Link>
         </nav>
       </header>
 
@@ -255,7 +231,7 @@ export default function Landing() {
               <div className="feature-icon-badge">📩</div>
               <h3>Gmail AI Auto-Categorization</h3>
               <p>
-                Automatically classifies incoming messages into distinct categories: Social, Financial, Technical, Promotions, Feature Requests, and General support.
+                Automatically classifies incoming messages into 6 distinct categories: Social, Financial, Technical, Promotions, Feature Requests, and General support.
               </p>
             </div>
 
@@ -269,17 +245,17 @@ export default function Landing() {
 
             <div className="deep-feature-card">
               <div className="feature-icon-badge">🤖</div>
-              <h3>AI Reply Refinement & Knowledge Base</h3>
+              <h3>AI Chat Assistant</h3>
               <p>
-                Rewrite responses with custom tones (Formal, Friendly, Shorten, Simplify) and inject relevant standard knowledge base documentation with 1-click.
+                Interact with your support dataset using natural language. Query high-priority tickets, get instant summaries, and auto-draft customer responses.
               </p>
             </div>
 
             <div className="deep-feature-card">
               <div className="feature-icon-badge">⏰</div>
-              <h3>Tier 2 Escalations & Gmail Dispatch</h3>
+              <h3>Deadline & Volume Alarms</h3>
               <p>
-                Escalate complex tickets to engineering with structured reason logging, and send resolved responses directly back through authorized Gmail.
+                Receive automated alerts when time-sensitive customer tickets near deadline or when incoming email volume spikes unexpectedly.
               </p>
             </div>
           </div>
@@ -329,11 +305,8 @@ export default function Landing() {
       {/* CLOSING HERO CTA */}
       <section className="landing-closing scroll-reveal">
         <h2>Built for scanning, triage, and action.</h2>
-        <button
-          onClick={() => navigate(isAuthenticated ? "/dashboard" : "/auth?mode=signup")}
-          className="hero-cta-button"
-        >
-          <span>{isAuthenticated ? "Open Workspace" : "Start with SupportHub"}</span>
+        <button onClick={() => navigate("/auth?mode=signup")} className="hero-cta-button">
+          <span>Start with SupportHub</span>
           <span className="arrow-icon" aria-hidden="true">
             →
           </span>
