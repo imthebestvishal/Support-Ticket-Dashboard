@@ -3,41 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { authClient } from "../lib/auth";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:5000";
-async function requestNotificationPermission() {
-
-  if (!("Notification" in window)) {
-    return;
-  }
-
-
-  if (Notification.permission === "default") {
-
-    await Notification.requestPermission();
-
-  }
-
-}
-
-
-function sendSystemDeadlineNotification(ticket: Ticket) {
-
-  if (
-    "Notification" in window &&
-    Notification.permission === "granted"
-  ) {
-
-    new Notification(
-      "Support Ticket Deadline",
-      {
-        body:
-          `${ticket.subject || "Ticket"} - ${ticket.deadlineStatus}`,
-      }
-    );
-
-  }
-
-}
-
 const GMAIL_AUTH_TOKEN_KEY = "gmailAuthToken";
 
 type Ticket = {
@@ -781,12 +746,6 @@ function Workspace() {
       );
 
       setDeadlineNotifications(deadlineItems);
-
-      await requestNotificationPermission();
-
-      deadlineItems.forEach((ticket: Ticket) => {
-        sendSystemDeadlineNotification(ticket);
-      });
       await loadDeletedMessages();
 
       /*
@@ -3492,9 +3451,6 @@ function Workspace() {
 }
 
 export default Workspace;
-
-
-
 
 
 
