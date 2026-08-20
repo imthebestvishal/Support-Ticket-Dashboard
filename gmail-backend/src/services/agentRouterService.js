@@ -1,5 +1,6 @@
-const DEFAULT_AGENT_ROUTER_MODEL = "gpt-5.6-sol";
+const DEFAULT_AGENT_ROUTER_MODEL = "gpt-5.5";
 const DEFAULT_AGENT_ROUTER_BASE_URL = "https://agentrouter.org/v1";
+const AGENT_ROUTER_CHAT_BASE_URL = "https://co.agentrouter.org/v1";
 const LAST_PROVIDER_STATUS = {
   httpStatus: null,
   contentType: "",
@@ -76,11 +77,13 @@ function getAgentRouterBaseUrl() {
 
   if (
     configuredBaseUrl === "http://agentrouter.org/v1" ||
-    configuredBaseUrl === "agentrouter.org/v1" ||
-    configuredBaseUrl === "https://co.agentrouter.org/v1" ||
-    configuredBaseUrl === "co.agentrouter.org/v1"
+    configuredBaseUrl === "agentrouter.org/v1"
   ) {
     return DEFAULT_AGENT_ROUTER_BASE_URL;
+  }
+
+  if (configuredBaseUrl === "co.agentrouter.org/v1") {
+    return AGENT_ROUTER_CHAT_BASE_URL;
   }
 
   if (!/^https?:\/\//i.test(configuredBaseUrl)) {
@@ -88,6 +91,16 @@ function getAgentRouterBaseUrl() {
   }
 
   return configuredBaseUrl;
+}
+
+function getAgentRouterWireApi() {
+  const value = (
+    process.env.AGENT_ROUTER_WIRE_API || "auto"
+  ).toLowerCase();
+
+  return ["auto", "responses", "chat"].includes(value)
+    ? value
+    : "auto";
 }
 
 function toResponseInput(messages) {
@@ -102,6 +115,13 @@ function toResponseInput(messages) {
   }));
 }
 
+function toChatMessages(messages) {
+  return messages.map((message) => ({
+    role: message.role,
+    content: message.content || "",
+  }));
+}
+
 function extractResponseText(data) {
   if (data?.output_text?.trim()) {
     return data.output_text.trim();
@@ -113,6 +133,10 @@ function extractResponseText(data) {
     ?.filter(Boolean);
 
   return parts?.join("\n").trim() || "";
+}
+
+function extractChatText(data) {
+  return data?.choices?.[0]?.message?.content?.trim() || "";
 }
 
 export function isAgentRouterConfigured() {
@@ -139,12 +163,78 @@ export function getAgentRouterStatus() {
     configured: Boolean(isAgentRouterConfigured()),
     model: getAgentRouterModel(),
     baseUrl: getAgentRouterBaseUrl(),
+    wireApi: getAgentRouterWireApi(),
     tokenPresent: Boolean(token),
     tokenLength: token.length,
     lastProviderStatus: {
       ...LAST_PROVIDER_STATUS,
     },
   };
+}
+
+function buildRequests({
+  baseUrl,
+  model,
+  messages,
+  temperature,
+  maxTokens,
+  json,
+}) {
+  const responseRequest = {
+    wireApi: "responses",
+    url: `${baseUrl}/responses`,
+    body: {
+      model,
+      input: toResponseInput(messages),
+      temperature,
+      max_output_tokens: maxTokens,
+      ...(json
+        ? {
+            text: {
+              format: {
+                type: "json_object",
+              },
+            },
+          }
+        : {}),
+    },
+    extractText: extractResponseText,
+  };
+  const chatBaseUrl =
+    baseUrl === DEFAULT_AGENT_ROUTER_BASE_URL
+      ? AGENT_ROUTER_CHAT_BASE_URL
+      : baseUrl;
+  const chatRequest = {
+    wireApi: "chat",
+    url: `${chatBaseUrl}/chat/completions`,
+    body: {
+      model,
+      messages: toChatMessages(messages),
+      temperature,
+      max_tokens: maxTokens,
+      ...(json
+        ? {
+            response_format: {
+              type: "json_object",
+            },
+          }
+        : {}),
+    },
+    extractText: extractChatText,
+  };
+  const wireApi = getAgentRouterWireApi();
+
+  if (wireApi === "responses") {
+    return [responseRequest, chatRequest];
+  }
+
+  if (wireApi === "chat") {
+    return [chatRequest, responseRequest];
+  }
+
+  return baseUrl === AGENT_ROUTER_CHAT_BASE_URL
+    ? [chatRequest, responseRequest]
+    : [responseRequest, chatRequest];
 }
 
 function rememberProviderStatus({ response, error = "" }) {
@@ -168,10 +258,18 @@ async function requestAgentRouter({
   const token = getAgentRouterToken();
   const model = getAgentRouterModel();
   const baseUrl = getAgentRouterBaseUrl();
+  const requests = buildRequests({
+    baseUrl,
+    model,
+    messages,
+    temperature,
+    maxTokens,
+    json,
+  });
+  const errors = [];
 
-  const response = await fetch(
-    `${baseUrl}/responses`,
-    {
+  for (const request of requests) {
+    const response = await fetch(request.url, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -181,28 +279,13 @@ async function requestAgentRouter({
         "HTTP-Referer": process.env.FRONTEND_URL || "http://localhost:5173",
         "X-Title": "SupportHub",
       },
-      body: JSON.stringify({
-        model,
-        input: toResponseInput(messages),
-        temperature,
-        max_output_tokens: maxTokens,
-        ...(json
-          ? {
-              text: {
-                format: {
-                  type: "json_object",
-                },
-              },
-            }
-          : {}),
-      }),
-    }
-  );
+      body: JSON.stringify(request.body),
+    });
 
-  if (!response.ok) {
+    if (!response.ok) {
     const contentType = response.headers.get("content-type") || "";
     const errorText = cleanErrorText(await response.text(), contentType);
-    const providerDetails = `HTTP ${response.status}; content-type: ${
+    const providerDetails = `${request.wireApi} ${request.url} returned HTTP ${response.status}; content-type: ${
       contentType || "unknown"
     }; details: ${errorText}`;
 
@@ -223,25 +306,23 @@ async function requestAgentRouter({
       );
     }
 
+    errors.push(providerDetails);
+
     if (
       response.status === 405 ||
       contentType.includes("text/html")
     ) {
-      throw new Error(
-        `AgentRouter rejected the request. Check the token, model "${model}", and base URL "${baseUrl}". ${providerDetails}`
-      );
+      continue;
     }
 
-    throw new Error(
-      `AgentRouter API error. ${providerDetails}`
-    );
+    continue;
   }
 
   const contentType = response.headers.get("content-type") || "";
 
   if (!contentType.includes("application/json")) {
     const errorText = cleanErrorText(await response.text(), contentType);
-    const providerDetails = `HTTP ${response.status}; content-type: ${
+    const providerDetails = `${request.wireApi} ${request.url} returned HTTP ${response.status}; content-type: ${
       contentType || "unknown"
     }; details: ${errorText}`;
 
@@ -250,16 +331,22 @@ async function requestAgentRouter({
       error: providerDetails,
     });
 
-    throw new Error(
-      `AgentRouter returned a non-JSON response. Check the token, model "${model}", and base URL "${baseUrl}". ${providerDetails}`
-    );
+    errors.push(providerDetails);
+    continue;
   }
 
   const data = await response.json();
-  const text = extractResponseText(data);
+  const text = request.extractText(data);
 
   if (!text) {
-    throw new Error("AgentRouter returned an empty response");
+    const providerDetails = `${request.wireApi} ${request.url} returned an empty response`;
+
+    rememberProviderStatus({
+      response,
+      error: providerDetails,
+    });
+    errors.push(providerDetails);
+    continue;
   }
 
   rememberProviderStatus({
@@ -267,6 +354,11 @@ async function requestAgentRouter({
   });
 
   return text;
+  }
+
+  throw new Error(
+    `AgentRouter rejected all supported request formats for model "${model}". ${errors.join(" | ")}`
+  );
 }
 
 export async function askAgentRouter(options) {
