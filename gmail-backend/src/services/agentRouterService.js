@@ -66,13 +66,25 @@ function getAgentRouterToken() {
 }
 
 function getAgentRouterBaseUrl() {
-  const configuredBaseUrl = (
+  const rawBaseUrl = (
     process.env.AGENT_ROUTER_BASE_URL ||
     DEFAULT_AGENT_ROUTER_BASE_URL
-  ).replace(/\/+$/, "");
+  ).trim();
+  const configuredBaseUrl = rawBaseUrl
+    .replace(/^\/\//, "https://")
+    .replace(/\/+$/, "");
 
-  if (configuredBaseUrl === "https://agentrouter.org/v1") {
+  if (
+    configuredBaseUrl === "https://agentrouter.org/v1" ||
+    configuredBaseUrl === "http://agentrouter.org/v1" ||
+    configuredBaseUrl === "agentrouter.org/v1" ||
+    configuredBaseUrl === "co.agentrouter.org/v1"
+  ) {
     return DEFAULT_AGENT_ROUTER_BASE_URL;
+  }
+
+  if (!/^https?:\/\//i.test(configuredBaseUrl)) {
+    return `https://${configuredBaseUrl}`;
   }
 
   return configuredBaseUrl;
