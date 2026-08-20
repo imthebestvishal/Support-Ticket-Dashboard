@@ -1,23 +1,52 @@
-const AGENT_ROUTER_TOKEN = process.env.AGENT_ROUTER_TOKEN;
-const AGENT_ROUTER_MODEL =
-  process.env.AGENT_ROUTER_MODEL || "gpt-5";
-const AGENT_ROUTER_BASE_URL =
-  process.env.AGENT_ROUTER_BASE_URL ||
-  "https://agentrouter.org/v1";
+const DEFAULT_AGENT_ROUTER_MODEL = "agentrouter/gpt-5";
+const DEFAULT_AGENT_ROUTER_BASE_URL = "https://agentrouter.org/v1";
+const LAST_PROVIDER_STATUS = {
+  httpStatus: null,
+  contentType: "",
+  error: "",
+  checkedAt: "",
+};
 
-function cleanErrorText(text) {
+function isPlaceholderToken(token) {
+  return (
+    !token ||
+    token.startsWith("your-") ||
+    token.includes("replace") ||
+    token.includes("<") ||
+    token.length <= 25
+  );
+}
+
+function cleanHtmlText(text) {
+  const blockMessage = text.match(/"block_message":"([^"]+)"/);
+
+  if (blockMessage?.[1]) {
+    return blockMessage[1];
+  }
+
+  const title = text.match(/<title[^>]*>(.*?)<\/title>/is);
+
+  if (title?.[1]) {
+    return title[1].replace(/\s+/g, " ").trim();
+  }
+
+  return "AgentRouter returned an HTML page instead of JSON.";
+}
+
+function truncateErrorText(text) {
+  return text.length > 220 ? `${text.slice(0, 217)}...` : text;
+}
+
+function cleanErrorText(text, contentType = "") {
   if (!text) {
     return "";
   }
 
-  if (text.trim().startsWith("<")) {
-    const blockMessage = text.match(/"block_message":"([^"]+)"/);
-
-    if (blockMessage?.[1]) {
-      return blockMessage[1];
-    }
-
-    return "AgentRouter returned an HTML error page instead of JSON.";
+  if (
+    contentType.includes("text/html") ||
+    text.trim().startsWith("<")
+  ) {
+    return cleanHtmlText(text);
   }
 
   try {
@@ -28,33 +57,56 @@ function cleanErrorText(text) {
       text
     );
   } catch {
-    return text;
+    return truncateErrorText(text);
   }
 }
 
-export function isAgentRouterConfigured() {
+function getAgentRouterToken() {
+  return process.env.AGENT_ROUTER_TOKEN || "";
+}
+
+function getAgentRouterBaseUrl() {
   return (
-    AGENT_ROUTER_TOKEN &&
-    !AGENT_ROUTER_TOKEN.startsWith("your-") &&
-    AGENT_ROUTER_TOKEN.length > 25
-  );
+    process.env.AGENT_ROUTER_BASE_URL ||
+    DEFAULT_AGENT_ROUTER_BASE_URL
+  ).replace(/\/+$/, "");
+}
+
+export function isAgentRouterConfigured() {
+  return !isPlaceholderToken(getAgentRouterToken());
 }
 
 export function getAgentRouterModel() {
-  return AGENT_ROUTER_MODEL;
+  return (
+    process.env.AGENT_ROUTER_MODEL ||
+    DEFAULT_AGENT_ROUTER_MODEL
+  );
 }
 
 export function getAgentRouterStatus() {
+  const token = getAgentRouterToken();
+
   return {
     configured: Boolean(isAgentRouterConfigured()),
-    model: AGENT_ROUTER_MODEL,
-    baseUrl: AGENT_ROUTER_BASE_URL,
-    tokenPresent: Boolean(AGENT_ROUTER_TOKEN),
-    tokenLength: AGENT_ROUTER_TOKEN?.length || 0,
+    model: getAgentRouterModel(),
+    baseUrl: getAgentRouterBaseUrl(),
+    tokenPresent: Boolean(token),
+    tokenLength: token.length,
+    lastProviderStatus: {
+      ...LAST_PROVIDER_STATUS,
+    },
   };
 }
 
-export async function askAgentRouter({
+function rememberProviderStatus({ response, error = "" }) {
+  LAST_PROVIDER_STATUS.httpStatus = response?.status || null;
+  LAST_PROVIDER_STATUS.contentType =
+    response?.headers?.get("content-type") || "";
+  LAST_PROVIDER_STATUS.error = error;
+  LAST_PROVIDER_STATUS.checkedAt = new Date().toISOString();
+}
+
+async function requestAgentRouter({
   messages,
   temperature = 0.2,
   maxTokens = 1200,
@@ -64,12 +116,16 @@ export async function askAgentRouter({
     throw new Error("AGENT_ROUTER_TOKEN is not configured");
   }
 
+  const token = getAgentRouterToken();
+  const model = getAgentRouterModel();
+  const baseUrl = getAgentRouterBaseUrl();
+
   const response = await fetch(
-    `${AGENT_ROUTER_BASE_URL}/chat/completions`,
+    `${baseUrl}/chat/completions`,
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${AGENT_ROUTER_TOKEN}`,
+        Authorization: `Bearer ${token}`,
         Accept: "application/json",
         "Content-Type": "application/json",
         "User-Agent": "SupportHub/1.0",
@@ -77,7 +133,7 @@ export async function askAgentRouter({
         "X-Title": "SupportHub",
       },
       body: JSON.stringify({
-        model: AGENT_ROUTER_MODEL,
+        model,
         messages,
         temperature,
         max_tokens: maxTokens,
@@ -93,7 +149,16 @@ export async function askAgentRouter({
   );
 
   if (!response.ok) {
-    const errorText = cleanErrorText(await response.text());
+    const contentType = response.headers.get("content-type") || "";
+    const errorText = cleanErrorText(await response.text(), contentType);
+    const providerDetails = `HTTP ${response.status}; content-type: ${
+      contentType || "unknown"
+    }; details: ${errorText}`;
+
+    rememberProviderStatus({
+      response,
+      error: providerDetails,
+    });
 
     if (response.status === 429) {
       throw new Error(
@@ -103,18 +168,39 @@ export async function askAgentRouter({
 
     if (response.status === 401 || response.status === 403) {
       throw new Error(
-        "AgentRouter token is invalid or does not have permission to use this model."
+        `AgentRouter token is invalid or does not have permission to use model "${model}". ${providerDetails}`
       );
     }
 
-    if (response.status === 405) {
+    if (
+      response.status === 405 ||
+      contentType.includes("text/html")
+    ) {
       throw new Error(
-        `AgentRouter rejected the request. Check that AGENT_ROUTER_BASE_URL is https://agentrouter.org/v1 and that your token/model are enabled. Details: ${errorText}`
+        `AgentRouter rejected the request. Check the token, model "${model}", and base URL "${baseUrl}". ${providerDetails}`
       );
     }
 
     throw new Error(
-      `AgentRouter API error ${response.status}: ${errorText}`
+      `AgentRouter API error. ${providerDetails}`
+    );
+  }
+
+  const contentType = response.headers.get("content-type") || "";
+
+  if (!contentType.includes("application/json")) {
+    const errorText = cleanErrorText(await response.text(), contentType);
+    const providerDetails = `HTTP ${response.status}; content-type: ${
+      contentType || "unknown"
+    }; details: ${errorText}`;
+
+    rememberProviderStatus({
+      response,
+      error: providerDetails,
+    });
+
+    throw new Error(
+      `AgentRouter returned a non-JSON response. Check the token, model "${model}", and base URL "${baseUrl}". ${providerDetails}`
     );
   }
 
@@ -125,5 +211,47 @@ export async function askAgentRouter({
     throw new Error("AgentRouter returned an empty response");
   }
 
+  rememberProviderStatus({
+    response,
+  });
+
   return text;
+}
+
+export async function askAgentRouter(options) {
+  return requestAgentRouter(options);
+}
+
+export async function probeAgentRouter() {
+  try {
+    const text = await requestAgentRouter({
+      messages: [
+        {
+          role: "user",
+          content: "Say ok.",
+        },
+      ],
+      temperature: 0,
+      maxTokens: 8,
+    });
+
+    return {
+      ok: true,
+      model: getAgentRouterModel(),
+      baseUrl: getAgentRouterBaseUrl(),
+      sample: text.slice(0, 40),
+      providerStatus: getAgentRouterStatus().lastProviderStatus,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      model: getAgentRouterModel(),
+      baseUrl: getAgentRouterBaseUrl(),
+      error:
+        error instanceof Error
+          ? error.message
+          : "AgentRouter probe failed",
+      providerStatus: getAgentRouterStatus().lastProviderStatus,
+    };
+  }
 }

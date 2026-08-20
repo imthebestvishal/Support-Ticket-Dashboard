@@ -9,7 +9,10 @@ import {
   sendReplyEmail,
 } from "../services/gmailService.js";
 import { askAssistant } from "../services/assistantService.js";
-import { getAgentRouterStatus } from "../services/agentRouterService.js";
+import {
+  getAgentRouterStatus,
+  probeAgentRouter,
+} from "../services/agentRouterService.js";
 import {
   getMemoryUser,
   listMemoryMessages,
@@ -491,7 +494,18 @@ router.post("/messages/:id/send-reply", requireAuth, async (req, res) => {
 
 // AI Support Assistant
 router.get("/assistant/status", requireAuth, async (req, res) => {
-  res.send(getAgentRouterStatus());
+  const status = getAgentRouterStatus();
+
+  if (req.query.probe !== "true") {
+    return res.send(status);
+  }
+
+  const probe = await probeAgentRouter();
+
+  res.send({
+    ...status,
+    probe,
+  });
 });
 
 router.post("/assistant", requireAuth, async (req, res) => {
