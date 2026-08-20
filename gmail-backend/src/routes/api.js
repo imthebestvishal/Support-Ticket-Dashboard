@@ -71,6 +71,39 @@ router.get("/gmail/status", requireAuth, async (req, res) => {
 // Get stored analyzed messages/tickets
 
 // Get deleted messages / recycle bin
+
+// Move message to trash
+router.delete("/messages/:id", requireAuth, async (req, res) => {
+  try {
+    const message = await findUserMessage(
+      req.params.id,
+      req.user._id
+    );
+
+    if (!message) {
+      return res.status(404).send({
+        error: "Message not found",
+      });
+    }
+
+    message.status = "deleted";
+    message.deletedAt = new Date();
+
+    await message.save();
+
+    res.send({
+      message: "Moved to trash",
+      ticket: message,
+    });
+
+  } catch (error) {
+    console.error("Delete message error:", error);
+
+    res.status(500).send({
+      error: error.message || "Failed to delete message",
+    });
+  }
+});
 router.get("/messages/trash", requireAuth, async (req, res) => {
   try {
     const messages = await Message.find({
@@ -431,6 +464,7 @@ router.post("/messages/:id/send-reply", requireAuth, async (req, res) => {
 
 // Generate AI reply draft
 export { router as apiRouter };
+
 
 
 

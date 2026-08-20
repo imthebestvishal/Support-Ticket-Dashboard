@@ -584,7 +584,11 @@ function Workspace() {
         }
       );
 
-      const data = await response.json();
+      const text = await response.text();
+
+      console.log("Gmail response:", response.status, text);
+
+      const data = JSON.parse(text);
 
       if (!response.ok) {
         throw new Error(
@@ -640,7 +644,11 @@ function Workspace() {
         }
       );
 
-      const data = await response.json();
+      const text = await response.text();
+
+      console.log("Gmail response:", response.status, text);
+
+      const data = JSON.parse(text);
 
       if (
         response.status === 401 ||
@@ -698,7 +706,11 @@ function Workspace() {
         }
       );
 
-      const data = await response.json();
+      const text = await response.text();
+
+      console.log("Gmail response:", response.status, text);
+
+      const data = JSON.parse(text);
 
       if (response.status === 401) {
         setGmailStatus("Not connected");
@@ -755,7 +767,11 @@ function Workspace() {
         }
       );
 
-      const data = await response.json();
+      const text = await response.text();
+
+      console.log("Gmail response:", response.status, text);
+
+      const data = JSON.parse(text);
 
       if (response.status === 401) {
         setDeletedMessages([]);
@@ -812,7 +828,11 @@ function Workspace() {
         }
       );
 
-      const data = await response.json();
+      const text = await response.text();
+
+      console.log("Gmail response:", response.status, text);
+
+      const data = JSON.parse(text);
 
       if (!response.ok) {
         throw new Error(
@@ -871,7 +891,11 @@ function Workspace() {
         }
       );
 
-      const data = await response.json();
+      const text = await response.text();
+
+      console.log("Gmail response:", response.status, text);
+
+      const data = JSON.parse(text);
 
       if (!response.ok) {
         throw new Error(
@@ -918,7 +942,11 @@ function Workspace() {
         }
       );
 
-      const data = await response.json();
+      const text = await response.text();
+
+      console.log("Gmail response:", response.status, text);
+
+      const data = JSON.parse(text);
 
       if (!response.ok) {
         throw new Error(
@@ -972,7 +1000,11 @@ function Workspace() {
         }
       );
 
-      const data = await response.json();
+      const text = await response.text();
+
+      console.log("Gmail response:", response.status, text);
+
+      const data = JSON.parse(text);
 
       if (!response.ok) {
         throw new Error(
@@ -1063,7 +1095,11 @@ function Workspace() {
         }
       );
 
-      const data = await response.json();
+      const text = await response.text();
+
+      console.log("Gmail response:", response.status, text);
+
+      const data = JSON.parse(text);
 
       if (!response.ok) {
         throw new Error(
@@ -1168,7 +1204,11 @@ function Workspace() {
         }
       );
 
-      const data = await response.json();
+      const text = await response.text();
+
+      console.log("Gmail response:", response.status, text);
+
+      const data = JSON.parse(text);
 
       if (!response.ok) {
         throw new Error(
@@ -1233,7 +1273,11 @@ function Workspace() {
         }
       );
 
-      const data = await response.json();
+      const text = await response.text();
+
+      console.log("Gmail response:", response.status, text);
+
+      const data = JSON.parse(text);
 
       if (!response.ok) {
         throw new Error(
@@ -3393,6 +3437,7 @@ function Workspace() {
 }
 
 export default Workspace;
+
 
 
 
