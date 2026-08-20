@@ -486,8 +486,6 @@ function Workspace() {
   const [deletedMessages, setDeletedMessages] =
     useState<Ticket[]>([]);
 
-  const [showNotificationPanel, setShowNotificationPanel] =
-    useState(false);
   const [deadlineNotifications, setDeadlineNotifications] =
     useState<Ticket[]>([]);
 
@@ -1600,11 +1598,27 @@ function Workspace() {
     getGreeting();
 
   function showAlerts() {
-    setShowNotificationPanel(
-      !showNotificationPanel
-    );
-
     setActive("Dashboard");
+
+    if (deadlineNotifications.length > 0) {
+      const deadlineText =
+        deadlineNotifications
+          .map(
+            (ticket: Ticket) =>
+              `${ticket.subject || "Ticket"} (${ticket.deadlineStatus})`
+          )
+          .join(", ");
+
+      setTopbarNotice(
+        `Deadline Alerts: ${deadlineText}`
+      );
+
+      return;
+    }
+
+    setTopbarNotice(
+      `Alerts: ${highCount} high-priority ticket${highCount === 1 ? "" : "s"}, ${openCount} open ticket${openCount === 1 ? "" : "s"}, Gmail ${gmailStatus.toLowerCase()}.`
+    );
   }
 
   function openHelp() {
@@ -3495,9 +3509,6 @@ function Workspace() {
 }
 
 export default Workspace;
-
-
-
 
 
 
