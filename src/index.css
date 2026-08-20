@@ -6179,3 +6179,187 @@ body.dark-theme .about-card h3,
 body.dark-theme .tab-hero-heading h2 {
   color: #ffffff !important;
 }
+
+/* AI Deadline Notification Center */
+
+
+
+.notification-center-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+.notification-center-header h2 {
+  margin: 0;
+  font-size: 22px;
+}
+
+
+.notification-item {
+  background: #f8fafc;
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 14px;
+  border: 1px solid #e5e7eb;
+}
+
+
+.notification-item strong {
+  display: block;
+  font-size: 16px;
+  margin-bottom: 8px;
+}
+
+
+.notification-item p {
+  margin: 0 0 14px;
+  color: #64748b;
+}
+
+
+
+
+
+
+
+
+
+
+
+.notification-close {
+  border: none;
+  background: #ef4444;
+  color: white;
+  padding: 7px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+
+/* Prevent notification from inheriting dashboard graphics */
+
+.notification-center * {
+  box-sizing: border-box;
+}
+
+
+@media(max-width:600px){
+
+  
+
+}
+
+
+
+
+.notification-item {
+  padding:16px;
+  margin-top:15px;
+  border-radius:12px;
+  background:#f8fafc;
+  border:1px solid #e5e7eb;
+}
+
+
+
+
+
+
+@media(max-width:700px){
+
+
+
+
+
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
+@media(max-width:900px){
+
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+@media(max-width:900px){
+
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+@media(max-width:700px){
+
+
+
+
+
+}
+
+
+
+
+
+
+
+.notification-empty svg {
+  width:40px;
+  height:40px;
+}
+
+
+
+.notification-center {
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.notification-empty {
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+

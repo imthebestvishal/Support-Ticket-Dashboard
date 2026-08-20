@@ -160,6 +160,8 @@ router.post("/messages/fetch", requireAuth, async (req, res) => {
         `${message.subject || ""} ${message.body || ""}`
       );
 
+      console.log("AI Deadline Result:", deadlineAI);
+
       message.deadline = deadlineAI.deadline;
       message.deadlineReason = deadlineAI.deadlineReason;
       message.deadlineStatus = deadlineAI.deadlineStatus;
@@ -498,6 +500,7 @@ router.post("/messages/:id/send-reply", requireAuth, async (req, res) => {
 
 // Generate AI reply draft
 export { router as apiRouter };
+
 
 
 

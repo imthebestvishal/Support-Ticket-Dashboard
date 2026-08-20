@@ -1710,7 +1710,154 @@ function showAlerts() {
         </div>
 
         
+<div className="ai-action-sidebar">
 
+<h3>
+AI Support Actions
+</h3>
+
+<p>
+AI deadline monitoring and ticket controls
+</p>
+
+
+<button
+type="button"
+onClick={() => setTopbarNotice("No deadline selected")}
+>
+Complete Deadline
+</button>
+
+
+<button
+type="button"
+onClick={() =>
+window.open(
+"https://calendar.google.com",
+"_blank"
+)
+}
+>
+Open Calendar
+</button>
+
+
+<button
+type="button"
+onClick={() =>
+setTopbarNotice("Reminder snoozed")
+}
+>
+Snooze Reminder
+</button>
+
+
+<button
+type="button"
+onClick={() =>
+setTopbarNotice("AI updating ticket status")
+}
+>
+AI Update
+</button>
+
+
+<button
+type="button"
+onClick={() =>
+setActive("Tickets")
+}
+>
+View Tickets
+</button>
+
+
+<button
+type="button"
+onClick={() =>
+setActive("Gmail Analyzer")
+}
+>
+Analyze Gmail
+</button>
+
+
+</div>
+
+<nav style={{ "--active-index": activeIndex } as CSSProperties}>
+          <span className="nav-active-indicator" aria-hidden="true" />
+          {navigation.map(
+            (item) => (
+              <button
+                key={item.name}
+                className={
+                  activeNavName === item.name
+                    ? "nav-item active"
+                    : "nav-item"
+                }
+                onClick={() =>
+                  setActive(item.name)
+                }
+              >
+
+                <span className="nav-icon">
+                  <NavIcon name={item.name} isDark={theme === "dark"} />
+                </span>
+
+                {item.name}
+
+                {item.name ===
+                  "Tickets" && (
+                  <b className="nav-count">
+                    {tickets.length}
+                  </b>
+                )}
+
+                {item.name ===
+                  "Gmail Analyzer" &&
+                  gmailMessages.length >
+                    0 && (
+                    <b className="nav-count">
+                      {
+                        gmailMessages.length
+                      }
+                    </b>
+                  )}
+
+              </button>
+            )
+          )}
+        </nav>
+
+        <div className="sidebar-bottom">
+
+          <div className="connection">
+            <div>
+              <span className="status-dot"></span>
+              Backend
+            </div>
+
+            <strong>
+              {backendStatus}
+            </strong>
+          </div>
+
+          <div className="connection">
+            <div>
+              <span className="status-dot"></span>
+              Gmail
+            </div>
+
+            <strong>
+              {gmailStatus.startsWith(
+                "Connected"
+              )
+                ? "Connected"
+                : gmailStatus}
+            </strong>
+          </div>
+
+        </div>
 
       </aside>
 
@@ -1746,7 +1893,7 @@ function showAlerts() {
               type="button"
               onClick={showAlerts}
             >
-              
+              <NavIcon name="Notifications" />
               {active === "AI Assistant" && <span className="notification-badge-dot" />}
             </button>
 
@@ -1805,6 +1952,121 @@ function showAlerts() {
         </header>
 
         <section className="content">
+          {showNotificationPanel && (
+            <section className="notification-center">
+
+              <div className="notification-center-header">
+                <div>
+                  <h2>AI Support Actions</h2>
+                  <p>AI-detected customer deadlines and actions.</p>
+                </div>
+
+                <button
+                  type="button"
+                  className="notification-close"
+                  onClick={() => setShowNotificationPanel(false)}
+                >
+                  Close
+                </button>
+              </div>
+
+              {deadlineNotifications.length === 0 ? (
+                <div className="notification-empty">
+                  <NavIcon name="Notifications" />
+                  <strong>No active deadlines. AI monitoring is enabled.</strong>
+                  <p>
+                    AI has not detected any active customer deadlines.
+                  </p>
+                </div>
+              ) : (
+                <div className="notification-list">
+
+                  {deadlineNotifications.map((ticket: Ticket) => (
+                    <article
+                      key={ticket._id}
+                      className="notification-item"
+                    >
+
+                      <div className="notification-item-content">
+
+                        <div className="notification-item-title">
+                          <strong>
+                            {ticket.subject || "Support Ticket"}
+                          </strong>
+
+                          <span className="notification-status">
+                            {ticket.deadlineStatus || "Deadline"}
+                          </span>
+                        </div>
+
+                        <p>
+                          {ticket.deadlineReason ||
+                            "AI detected a customer deadline."}
+                        </p>
+
+                        {ticket.deadline && (
+                          <small>
+                            Deadline:{" "}
+                            {new Date(
+                              ticket.deadline
+                            ).toLocaleString()}
+                          </small>
+                        )}
+
+                      </div>
+
+                      <div className="notification-actions">
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            ticket._id && completeDeadline(ticket._id)
+                          }
+                        >
+                          ? Complete
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            window.open(
+                              "https://calendar.google.com/calendar/u/0/r",
+                              "_blank"
+                            )
+                          }
+                        >
+                          Calendar
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            snoozeDeadline(ticket)
+                          }
+                        >
+                          Snooze
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            aiUpdateStatus(ticket)
+                          }
+                        >
+                          AI Update
+                        </button>
+
+                      </div>
+
+                    </article>
+                  ))}
+
+                </div>
+              )}
+
+            </section>
+          )}
+
           {topbarNotice && (
             <div className="alert topbar-notice">
               <span>{topbarNotice}</span>
@@ -1853,7 +2115,7 @@ function showAlerts() {
                       type="button"
                       onClick={showAlerts}
                     >
-    
+                      <NavIcon name="Notifications" />
                     </button>
 
                     <button
@@ -1919,7 +2181,7 @@ function showAlerts() {
 
                       {stat.chart === "alert" && (
                         <div className="metric-alert">
-        
+                          <NavIcon name="Notifications" />
                         </div>
                       )}
                     </div>
@@ -3469,12 +3731,6 @@ function showAlerts() {
 }
 
 export default Workspace;
-
-
-
-
-
-
 
 
 

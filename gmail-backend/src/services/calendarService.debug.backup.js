@@ -8,14 +8,7 @@ export async function createCalendarDeadline({
   reason,
 }) {
 
-  console.log("Calendar deadline request:", {
-    subject,
-    deadline,
-    reason
-  });
-
   if (!deadline) {
-    console.log("No deadline provided");
     return null;
   }
 
@@ -83,8 +76,5 @@ export async function createCalendarDeadline({
     });
 
 
-  console.log("Google Calendar event created:", event.data.id);
-
   return event.data;
 }
-

@@ -1746,7 +1746,7 @@ function showAlerts() {
               type="button"
               onClick={showAlerts}
             >
-              
+              <NavIcon name="Notifications" />
               {active === "AI Assistant" && <span className="notification-badge-dot" />}
             </button>
 
@@ -1805,6 +1805,121 @@ function showAlerts() {
         </header>
 
         <section className="content">
+          {showNotificationPanel && (
+            <section className="notification-center">
+
+              <div className="notification-center-header">
+                <div>
+                  <h2>AI Support Actions</h2>
+                  <p>AI-detected customer deadlines and actions.</p>
+                </div>
+
+                <button
+                  type="button"
+                  className="notification-close"
+                  onClick={() => setShowNotificationPanel(false)}
+                >
+                  Close
+                </button>
+              </div>
+
+              {deadlineNotifications.length === 0 ? (
+                <div className="notification-empty">
+                  <NavIcon name="Notifications" />
+                  <strong>No active deadlines. AI monitoring is enabled.</strong>
+                  <p>
+                    AI has not detected any active customer deadlines.
+                  </p>
+                </div>
+              ) : (
+                <div className="notification-list">
+
+                  {deadlineNotifications.map((ticket: Ticket) => (
+                    <article
+                      key={ticket._id}
+                      className="notification-item"
+                    >
+
+                      <div className="notification-item-content">
+
+                        <div className="notification-item-title">
+                          <strong>
+                            {ticket.subject || "Support Ticket"}
+                          </strong>
+
+                          <span className="notification-status">
+                            {ticket.deadlineStatus || "Deadline"}
+                          </span>
+                        </div>
+
+                        <p>
+                          {ticket.deadlineReason ||
+                            "AI detected a customer deadline."}
+                        </p>
+
+                        {ticket.deadline && (
+                          <small>
+                            Deadline:{" "}
+                            {new Date(
+                              ticket.deadline
+                            ).toLocaleString()}
+                          </small>
+                        )}
+
+                      </div>
+
+                      <div className="notification-actions">
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            ticket._id && completeDeadline(ticket._id)
+                          }
+                        >
+                          ? Complete
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            window.open(
+                              "https://calendar.google.com/calendar/u/0/r",
+                              "_blank"
+                            )
+                          }
+                        >
+                          Calendar
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            snoozeDeadline(ticket)
+                          }
+                        >
+                          Snooze
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            aiUpdateStatus(ticket)
+                          }
+                        >
+                          AI Update
+                        </button>
+
+                      </div>
+
+                    </article>
+                  ))}
+
+                </div>
+              )}
+
+            </section>
+          )}
+
           {topbarNotice && (
             <div className="alert topbar-notice">
               <span>{topbarNotice}</span>
@@ -1853,7 +1968,7 @@ function showAlerts() {
                       type="button"
                       onClick={showAlerts}
                     >
-    
+                      <NavIcon name="Notifications" />
                     </button>
 
                     <button
@@ -1919,7 +2034,7 @@ function showAlerts() {
 
                       {stat.chart === "alert" && (
                         <div className="metric-alert">
-        
+                          <NavIcon name="Notifications" />
                         </div>
                       )}
                     </div>
@@ -3469,10 +3584,6 @@ function showAlerts() {
 }
 
 export default Workspace;
-
-
-
-
 
 
 

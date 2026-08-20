@@ -3,6 +3,41 @@ import { useNavigate } from "react-router-dom";
 import { authClient } from "../lib/auth";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:5000";
+async function requestNotificationPermission() {
+
+  if (!("Notification" in window)) {
+    return;
+  }
+
+
+  if (Notification.permission === "default") {
+
+    await Notification.requestPermission();
+
+  }
+
+}
+
+
+function sendSystemDeadlineNotification(ticket: Ticket) {
+
+  if (
+    "Notification" in window &&
+    Notification.permission === "granted"
+  ) {
+
+    new Notification(
+      "Support Ticket Deadline",
+      {
+        body:
+          `${ticket.subject || "Ticket"} - ${ticket.deadlineStatus}`,
+      }
+    );
+
+  }
+
+}
+
 const GMAIL_AUTH_TOKEN_KEY = "gmailAuthToken";
 
 type Ticket = {
@@ -451,6 +486,10 @@ function Workspace() {
   const [deletedMessages, setDeletedMessages] =
     useState<Ticket[]>([]);
 
+  const [completedDeadlines, setCompletedDeadlines] =
+    useState<string[]>([]);
+  const [showNotificationPanel, setShowNotificationPanel] =
+    useState(false);
   const [deadlineNotifications, setDeadlineNotifications] =
     useState<Ticket[]>([]);
 
@@ -746,6 +785,12 @@ function Workspace() {
       );
 
       setDeadlineNotifications(deadlineItems);
+
+      await requestNotificationPermission();
+
+      deadlineItems.forEach((ticket: Ticket) => {
+        sendSystemDeadlineNotification(ticket);
+      });
       await loadDeletedMessages();
 
       /*
@@ -1556,11 +1601,56 @@ function Workspace() {
   const greeting =
     getGreeting();
 
-  function showAlerts() {
-    setActive("Dashboard");
+  function completeDeadline(ticketId: string) {
+    setCompletedDeadlines((prev) => [
+      ...prev,
+      ticketId
+    ]);
+
     setTopbarNotice(
-      `Alerts: ${highCount} high-priority ticket${highCount === 1 ? "" : "s"}, ${openCount} open ticket${openCount === 1 ? "" : "s"}, Gmail ${gmailStatus.toLowerCase()}.`
+      "Deadline marked completed"
     );
+}
+
+
+function openCalendar(ticket: Ticket) {
+
+    if (ticket.deadline) {
+
+      const calendarUrl =
+        `https://calendar.google.com/calendar/r/eventedit?text=${encodeURIComponent(ticket.subject || "Support Ticket")}`;
+
+      window.open(
+        calendarUrl,
+        "_blank"
+      );
+
+    }
+}
+
+
+function snoozeDeadline(ticket: Ticket) {
+
+    setTopbarNotice(
+      `Reminder snoozed for ${ticket.subject || "ticket"}`
+    );
+
+}
+
+
+function aiUpdateStatus(ticket: Ticket) {
+
+    setTopbarNotice(
+      `AI monitoring replies for ${ticket.subject || "ticket"}`
+    );
+
+}
+function showAlerts() {
+    setShowNotificationPanel(
+      !showNotificationPanel
+    );
+
+    setActive("Dashboard");
   }
 
   function openHelp() {
@@ -1619,80 +1709,8 @@ function Workspace() {
           <SidebarLogo />
         </div>
 
-        <nav style={{ "--active-index": activeIndex } as CSSProperties}>
-          <span className="nav-active-indicator" aria-hidden="true" />
-          {navigation.map(
-            (item) => (
-              <button
-                key={item.name}
-                className={
-                  activeNavName === item.name
-                    ? "nav-item active"
-                    : "nav-item"
-                }
-                onClick={() =>
-                  setActive(item.name)
-                }
-              >
+        
 
-                <span className="nav-icon">
-                  <NavIcon name={item.name} isDark={theme === "dark"} />
-                </span>
-
-                {item.name}
-
-                {item.name ===
-                  "Tickets" && (
-                  <b className="nav-count">
-                    {tickets.length}
-                  </b>
-                )}
-
-                {item.name ===
-                  "Gmail Analyzer" &&
-                  gmailMessages.length >
-                    0 && (
-                    <b className="nav-count">
-                      {
-                        gmailMessages.length
-                      }
-                    </b>
-                  )}
-
-              </button>
-            )
-          )}
-        </nav>
-
-        <div className="sidebar-bottom">
-
-          <div className="connection">
-            <div>
-              <span className="status-dot"></span>
-              Backend
-            </div>
-
-            <strong>
-              {backendStatus}
-            </strong>
-          </div>
-
-          <div className="connection">
-            <div>
-              <span className="status-dot"></span>
-              Gmail
-            </div>
-
-            <strong>
-              {gmailStatus.startsWith(
-                "Connected"
-              )
-                ? "Connected"
-                : gmailStatus}
-            </strong>
-          </div>
-
-        </div>
 
       </aside>
 
@@ -1835,7 +1853,7 @@ function Workspace() {
                       type="button"
                       onClick={showAlerts}
                     >
-                      <NavIcon name="Notifications" />
+    
                     </button>
 
                     <button
@@ -1901,7 +1919,7 @@ function Workspace() {
 
                       {stat.chart === "alert" && (
                         <div className="metric-alert">
-                          <NavIcon name="Notifications" />
+        
                         </div>
                       )}
                     </div>
@@ -3451,6 +3469,25 @@ function Workspace() {
 }
 
 export default Workspace;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
