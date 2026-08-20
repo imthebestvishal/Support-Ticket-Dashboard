@@ -30,12 +30,29 @@ for (const key of [
 const app = express();
 const port = process.env.PORT || 5000;
 const isProduction = process.env.NODE_ENV === "production";
-const sessionStore =
-  isProduction && process.env.MONGO_URI
-    ? MongoStore.create({
-        mongoUrl: process.env.MONGO_URI,
-      })
-    : undefined;
+const mongoUri = process.env.MONGO_URI || "";
+const hasMongoUri =
+  mongoUri.startsWith("mongodb://") ||
+  mongoUri.startsWith("mongodb+srv://");
+
+let sessionStore;
+
+if (isProduction && hasMongoUri) {
+  try {
+    sessionStore = MongoStore.create({
+      mongoUrl: mongoUri,
+    });
+  } catch (error) {
+    console.warn(
+      "Mongo session store unavailable; using in-memory sessions.",
+      error.message
+    );
+  }
+} else if (isProduction) {
+  console.warn(
+    "MONGO_URI is missing or invalid; using in-memory sessions."
+  );
+}
 const agentRouterStatus = getAgentRouterStatus();
 
 console.log(
@@ -96,21 +113,27 @@ app.use(
   }),
 );
 
-mongoose
-  .connect(process.env.MONGO_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-    serverSelectionTimeoutMS: 3000,
-  })
-  .then(() => {
-    console.log("MongoDB connected");
-  })
-  .catch((error) => {
-    console.warn(
-      "MongoDB unavailable; using in-memory storage for this local session.",
-      error.message
-    );
-  });
+if (hasMongoUri) {
+  mongoose
+    .connect(mongoUri, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 3000,
+    })
+    .then(() => {
+      console.log("MongoDB connected");
+    })
+    .catch((error) => {
+      console.warn(
+        "MongoDB unavailable; using in-memory storage for this session.",
+        error.message
+      );
+    });
+} else {
+  console.warn(
+    "MongoDB disabled because MONGO_URI is missing or invalid; using in-memory storage."
+  );
+}
 
 app.use("/auth", authRouter);
 app.use("/api", apiRouter);

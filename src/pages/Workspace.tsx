@@ -14,6 +14,10 @@ type Ticket = {
   body?: string;
   summary?: string;
   category?: string;
+  emailType?: string;
+  emailTypeReason?: string;
+  classificationReason?: string;
+  isActionable?: boolean;
   priority?: string;
   sentiment?: string;
   status?: string;
@@ -104,6 +108,72 @@ function priorityClass(priority?: string) {
   return "badge badge-green";
 }
 
+function emailTypeLabel(ticket: Ticket) {
+  return ticket.emailType || ticket.category || "";
+}
+
+function shouldShowPriority(ticket: Ticket) {
+  const priority = (ticket.priority || "").toLowerCase();
+
+  return (
+    priority === "urgent" ||
+    priority === "high"
+  );
+}
+
+function shouldShowStatus(ticket: Ticket) {
+  const status = (ticket.status || "Open").toLowerCase();
+
+  return status !== "open";
+}
+
+function RelevantChips({ ticket }: { ticket: Ticket }) {
+  const hasPriority = shouldShowPriority(ticket);
+  const hasEvent = Boolean(
+    ticket.eventTitle ||
+    ticket.eventDateTime ||
+    ticket.eventVenue ||
+    hasCalendarCandidate(ticket)
+  );
+  const hasStatus = shouldShowStatus(ticket);
+  const shouldShowType = Boolean(
+    ticket.emailType ||
+    (ticket.category && (hasPriority || hasEvent || hasStatus))
+  );
+  const reason =
+    ticket.emailTypeReason ||
+    ticket.classificationReason ||
+    "AI email type";
+
+  return (
+    <>
+      {shouldShowType && (
+        <span className="badge badge-gray" title={reason}>
+          {emailTypeLabel(ticket)}
+        </span>
+      )}
+
+      {hasPriority && (
+        <span className={priorityClass(ticket.priority)}>
+          {ticket.priority || "Medium"}
+        </span>
+      )}
+
+      {hasEvent && (
+        <span className="badge badge-green">
+          Event
+        </span>
+      )}
+
+      {hasStatus && (
+        <span className="badge badge-gray">
+          {ticket.status}
+        </span>
+      )}
+    </>
+  );
+}
+
 function ticketId(ticket: Ticket) {
   return ticket._id || ticket.gmailMessageId || "";
 }
@@ -154,6 +224,24 @@ function hasUsableEventDate(ticket: Ticket) {
   }
 
   return !Number.isNaN(new Date(ticket.eventDateTime).getTime());
+}
+
+function hasCalendarCandidate(ticket: Ticket) {
+  if (hasUsableEventDate(ticket)) {
+    return true;
+  }
+
+  const text = [
+    ticket.subject,
+    ticket.summary,
+    ticket.body,
+    ticket.emailType,
+    ticket.category,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return /\b(event|meeting|webinar|interview|appointment|deadline|closing|exam|schedule|venue|calendar|tomorrow|today|tonight|in\s+\d{1,3}\s+(hours?|days?)|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/i.test(text);
 }
 
 function draftSourceLabel(source?: string) {
@@ -1308,6 +1396,80 @@ function Workspace() {
     }
   }
 
+  function TicketEventPanel({ ticket }: { ticket: Ticket }) {
+    const id = ticketId(ticket);
+    const calendarState = id ? calendarActions[id] : undefined;
+    const hasEvent = Boolean(
+      ticket.eventTitle ||
+      ticket.eventVenue ||
+      ticket.eventDateTime ||
+      hasCalendarCandidate(ticket)
+    );
+
+    if (!hasEvent) {
+      return null;
+    }
+
+    return (
+      <div className="ticket-event-panel">
+        <div>
+          <strong>
+            {ticket.eventTitle || "Detected event"}
+          </strong>
+          <p>
+            {ticket.eventDateTime
+              ? formatTicketDate(ticket.eventDateTime)
+              : "Date will be detected from the email"}
+          </p>
+          {ticket.eventVenue && (
+            <p>{ticket.eventVenue}</p>
+          )}
+          {ticket.eventNotes && (
+            <span>{ticket.eventNotes}</span>
+          )}
+        </div>
+        <div className="ticket-event-actions">
+          {ticket.calendarEventLink ? (
+            <a
+              className="outline-button compact-action"
+              href={ticket.calendarEventLink}
+              target="_blank"
+              rel="noreferrer"
+            >
+              View Calendar Event
+            </a>
+          ) : hasCalendarCandidate(ticket) ? (
+            <button
+              className="outline-button compact-action"
+              onClick={() =>
+                addTicketEventToCalendar(ticket)
+              }
+              disabled={calendarState?.loading}
+            >
+              {calendarState?.loading
+                ? "Adding..."
+                : "Add to Calendar"}
+            </button>
+          ) : (
+            <span className="ticket-event-error">
+              Add a date/time to create a calendar event.
+            </span>
+          )}
+          {calendarState?.error && (
+            <span className="ticket-event-error">
+              {calendarState.error}
+            </span>
+          )}
+          {calendarState?.success && (
+            <span className="ticket-event-success">
+              {calendarState.success}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   function editReplyDraft(ticket: Ticket, draft: string) {
     const id = ticketId(ticket);
 
@@ -2089,12 +2251,7 @@ function Workspace() {
                         </div>
 
                         <div className="dashboard-ticket-badges">
-                          <span className={priorityClass(ticket.priority)}>
-                            {ticket.priority || "Medium"}
-                          </span>
-                          <span className="badge badge-green">
-                            {ticket.status || "Open"}
-                          </span>
+                          <RelevantChips ticket={ticket} />
                         </div>
                       </article>
                     ))}
@@ -2234,7 +2391,6 @@ function Workspace() {
                       (ticket) => {
                         const id = ticketId(ticket);
                         const replyState = replyDrafts[id];
-                        const calendarState = calendarActions[id];
                         const canReply =
                           Boolean(ticket.gmailMessageId) &&
                           hasUsableSender(ticket.sender);
@@ -2276,25 +2432,7 @@ function Workspace() {
                               </div>
 
                               <div className="badges">
-
-                                <span className="badge badge-gray">
-                                  {ticket.category ||
-                                    "Other"}
-                                </span>
-
-                                <span
-                                  className={priorityClass(
-                                    ticket.priority
-                                  )}
-                                >
-                                  {ticket.priority ||
-                                    "Medium"}
-                                </span>
-
-                                <span className="badge badge-gray">
-                                  {ticket.status ||
-                                    "Open"}
-                                </span>
+                                <RelevantChips ticket={ticket} />
 
                                 <button
                                   className="outline-button compact-action"
@@ -2321,62 +2459,7 @@ function Workspace() {
 
                             </div>
 
-                            {(ticket.eventTitle ||
-                              ticket.eventVenue ||
-                              ticket.eventDateTime) && (
-                              <div className="ticket-event-panel">
-                                <div>
-                                  <strong>
-                                    {ticket.eventTitle || "Detected event"}
-                                  </strong>
-                                  <p>
-                                    {ticket.eventDateTime
-                                      ? formatTicketDate(ticket.eventDateTime)
-                                      : "Date not available"}
-                                  </p>
-                                  {ticket.eventVenue && (
-                                    <p>{ticket.eventVenue}</p>
-                                  )}
-                                  {ticket.eventNotes && (
-                                    <span>{ticket.eventNotes}</span>
-                                  )}
-                                </div>
-                                <div className="ticket-event-actions">
-                                  {ticket.calendarEventLink ? (
-                                    <a
-                                      className="outline-button compact-action"
-                                      href={ticket.calendarEventLink}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                    >
-                                      View Calendar Event
-                                    </a>
-                                  ) : hasUsableEventDate(ticket) ? (
-                                    <button
-                                      className="outline-button compact-action"
-                                      onClick={() =>
-                                        addTicketEventToCalendar(ticket)
-                                      }
-                                      disabled={calendarState?.loading}
-                                    >
-                                      {calendarState?.loading
-                                        ? "Adding..."
-                                        : "Add to Calendar"}
-                                    </button>
-                                  ) : null}
-                                  {calendarState?.error && (
-                                    <span className="ticket-event-error">
-                                      {calendarState.error}
-                                    </span>
-                                  )}
-                                  {calendarState?.success && (
-                                    <span className="ticket-event-success">
-                                      {calendarState.success}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            )}
+                            <TicketEventPanel ticket={ticket} />
 
                             {replyState && (
                               <div className="ai-draft-card">
@@ -2939,13 +3022,14 @@ function Workspace() {
 
                     {filteredGmailMessages.map(
                       (mail) => (
-                        <div
-                          className="ticket-row"
+                        <article
+                          className="ticket-reply-item"
                           key={
                             mail._id ||
                             mail.gmailMessageId
                           }
                         >
+                          <div className="ticket-row">
                           <CategoryIcon category={mail.category} subject={mail.subject} sender={mail.sender} />
 
                           <div
@@ -3000,30 +3084,7 @@ function Workspace() {
                                 "180px",
                             }}
                           >
-
-                            <span className="badge badge-gray">
-                              {mail.category ||
-                                "Other"}
-                            </span>
-
-                            <span
-                              className={priorityClass(
-                                mail.priority
-                              )}
-                            >
-                              {mail.priority ||
-                                "Medium"}
-                            </span>
-
-                            <span className="badge badge-gray">
-                              {mail.sentiment ||
-                                "Neutral"}
-                            </span>
-
-                            <span className="badge badge-gray">
-                              {mail.status ||
-                                "Open"}
-                            </span>
+                            <RelevantChips ticket={mail} />
 
                             <button
                               className="delete-button"
@@ -3041,7 +3102,10 @@ function Workspace() {
 
                           </div>
 
-                        </div>
+                          </div>
+
+                          <TicketEventPanel ticket={mail} />
+                        </article>
                       )
                     )}
 
@@ -3203,20 +3267,7 @@ function Workspace() {
                                 "230px",
                             }}
                           >
-
-                            <span className="badge badge-gray">
-                              {mail.category ||
-                                "Other"}
-                            </span>
-
-                            <span
-                              className={priorityClass(
-                                mail.priority
-                              )}
-                            >
-                              {mail.priority ||
-                                "Medium"}
-                            </span>
+                            <RelevantChips ticket={mail} />
 
                             <button
                               className="outline-button"

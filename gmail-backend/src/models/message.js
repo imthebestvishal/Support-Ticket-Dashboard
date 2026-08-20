@@ -88,6 +88,16 @@ const messageSchema = new mongoose.Schema(
       default: "",
     },
 
+    emailType: {
+      type: String,
+      default: "",
+    },
+
+    emailTypeReason: {
+      type: String,
+      default: "",
+    },
+
     replyDraft: {
       type: String,
       default: "",
@@ -144,6 +154,11 @@ const messageSchema = new mongoose.Schema(
     },
 
     isTicket: {
+      type: Boolean,
+      default: true,
+    },
+
+    isActionable: {
       type: Boolean,
       default: true,
     },

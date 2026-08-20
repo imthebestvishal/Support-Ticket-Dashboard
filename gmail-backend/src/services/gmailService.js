@@ -40,6 +40,22 @@ const VALID_SENTIMENTS = [
   "Negative",
 ];
 
+const VALID_EMAIL_TYPES = [
+  "Access Request",
+  "Account Activity",
+  "Billing Question",
+  "Development Update",
+  "Event Invitation",
+  "Finance Transaction",
+  "Job Update",
+  "Newsletter",
+  "Security Notice",
+  "Social Notification",
+  "Support Request",
+  "System Notification",
+  "Other",
+];
+
 function extractEmailAddress(value = "") {
   const match = value.match(/<([^>]+)>/);
   const email = (match?.[1] || value).trim();
@@ -236,6 +252,80 @@ function fallbackPriority(text) {
   return "Low";
 }
 
+function fallbackEmailType(text, category) {
+  if (
+    text.includes("unauthorized") ||
+    text.includes("security") ||
+    text.includes("password") ||
+    text.includes("sign in") ||
+    text.includes("login")
+  ) {
+    return "Security Notice";
+  }
+
+  if (
+    text.includes("access") ||
+    text.includes("permission") ||
+    text.includes("shared") ||
+    text.includes("account")
+  ) {
+    return "Access Request";
+  }
+
+  if (
+    text.includes("transaction") ||
+    text.includes("bank") ||
+    text.includes("card") ||
+    text.includes("payment")
+  ) {
+    return "Finance Transaction";
+  }
+
+  if (
+    text.includes("meeting") ||
+    text.includes("webinar") ||
+    text.includes("interview") ||
+    text.includes("venue") ||
+    text.includes("calendar")
+  ) {
+    return "Event Invitation";
+  }
+
+  if (
+    text.includes("github") ||
+    text.includes("pull request") ||
+    text.includes("commit") ||
+    text.includes("issue")
+  ) {
+    return "Development Update";
+  }
+
+  if (
+    text.includes("newsletter") ||
+    text.includes("unsubscribe") ||
+    text.includes("offer") ||
+    text.includes("discount")
+  ) {
+    return "Newsletter";
+  }
+
+  if (category === "Social") {
+    return "Social Notification";
+  }
+
+  if (category === "Billing") {
+    return "Billing Question";
+  }
+
+  if (category === "Security") {
+    return "Security Notice";
+  }
+
+  return category && category !== "Other"
+    ? `${category} Email`
+    : "Other";
+}
+
 const GMAIL_FETCH_LIMIT = Number(
   process.env.GMAIL_FETCH_LIMIT || 25
 );
@@ -261,6 +351,9 @@ Return ONLY valid JSON in exactly this format:
   "sentiment": "Neutral",
   "suggestedResponse": "Natural professional reply specific to this email",
   "isTicket": true,
+  "isActionable": true,
+  "emailType": "Support Request",
+  "emailTypeReason": "One short reason for the practical email type",
   "classificationReason": "One short reason for category and priority",
   "eventTitle": "",
   "eventDateTime": "",
@@ -300,8 +393,28 @@ Priority definitions:
 sentiment must be exactly one of:
 Positive, Neutral, Negative
 
+emailType must be exactly one of:
+Access Request, Account Activity, Billing Question, Development Update, Event Invitation, Finance Transaction, Job Update, Newsletter, Security Notice, Social Notification, Support Request, System Notification, Other
+
+Email type definitions:
+- Access Request: asks for permission, access, credentials, shared resources, or account access.
+- Account Activity: informs about account settings, linked apps, profile changes, or non-urgent account notices.
+- Billing Question: asks about invoices, refunds, charges, payment support, or plan billing.
+- Development Update: code, GitHub, pull request, deployment, issue, or repository notification.
+- Event Invitation: meeting, interview, webinar, appointment, deadline, exam, venue, or calendar-like schedule.
+- Finance Transaction: bank/card/payment/transaction/investment activity or financial alert.
+- Job Update: recruiter, application, interview, hiring, resume, or career message.
+- Newsletter: informational digest, promotion, marketing, or subscription update with no direct action.
+- Security Notice: suspicious activity, login alert, password, unauthorized access, or account safety.
+- Social Notification: social network/community follow, mention, message, or group update.
+- Support Request: direct request, complaint, question, or issue that needs a reply.
+- System Notification: automated FYI from a service with no direct human reply needed.
+- Other: unclear or not covered.
+
 isTicket must be true if the email contains a request, complaint, support question, account/billing/technical/finance/security issue, or any action that requires attention.
 isTicket may be false for pure newsletters, promotions, social notifications, receipts that need no action, and personal FYI emails.
+isActionable must be true only when a person should review, reply, create an event, resolve an issue, or take another concrete action.
+For low-value notifications, newsletters, and FYI emails, prefer isActionable false and a specific emailType rather than a support-request label.
 
 Keep summary short but specific. Avoid generic summaries.
 The suggestedResponse must sound human and natural, not a repeated template.
@@ -352,6 +465,18 @@ Event extraction:
         VALID_SENTIMENTS,
         "Neutral"
       ),
+      emailType: normalizedValue(
+        parsed.emailType,
+        VALID_EMAIL_TYPES,
+        fallbackEmailType(
+          `${subject} ${body}`.toLowerCase(),
+          parsed.category
+        )
+      ),
+      emailTypeReason:
+        parsed.emailTypeReason ||
+        parsed.classificationReason ||
+        "",
       suggestedResponse:
         parsed.suggestedResponse ||
         "",
@@ -369,6 +494,12 @@ Event extraction:
         typeof parsed.isTicket === "boolean"
           ? parsed.isTicket
           : true,
+      isActionable:
+        typeof parsed.isActionable === "boolean"
+          ? parsed.isActionable
+          : typeof parsed.isTicket === "boolean"
+            ? parsed.isTicket
+            : true,
     };
   } catch (error) {
     console.error(
@@ -378,11 +509,17 @@ Event extraction:
     const fallbackText =
       `${subject} ${body}`.toLowerCase();
 
+    const category = fallbackCategory(fallbackText);
+    const priority = fallbackPriority(fallbackText);
+
     return {
-      category: fallbackCategory(fallbackText),
-      priority: fallbackPriority(fallbackText),
+      category,
+      priority,
       summary: subject || text.substring(0, 500),
       sentiment: "Neutral",
+      emailType: fallbackEmailType(fallbackText, category),
+      emailTypeReason:
+        "Fallback email type used because AgentRouter returned invalid JSON.",
       suggestedResponse: "",
       classificationReason:
         "Fallback classification used because AgentRouter returned invalid JSON.",
@@ -392,6 +529,7 @@ Event extraction:
       eventConfidence: 0,
       eventNotes: "",
       isTicket: true,
+      isActionable: priority !== "Low",
     };
   }
 }
@@ -507,6 +645,135 @@ function parseEventDateTime(value) {
   const parsed = new Date(text);
 
   return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function inferEventDateFromText(text, baseDate = new Date()) {
+  const source = String(text || "");
+  const now = Number.isNaN(new Date(baseDate).getTime())
+    ? new Date()
+    : new Date(baseDate);
+  const relativeHours = source.match(/\bin\s+(\d{1,3})\s+hours?\b/i);
+
+  if (relativeHours) {
+    const date = new Date(now);
+    date.setHours(date.getHours() + Number(relativeHours[1]));
+    return date;
+  }
+
+  const relativeDays = source.match(/\bin\s+(\d{1,3})\s+days?\b/i);
+
+  if (relativeDays) {
+    const date = new Date(now);
+    date.setDate(date.getDate() + Number(relativeDays[1]));
+    return date;
+  }
+
+  if (/\btomorrow\b/i.test(source)) {
+    const date = new Date(now);
+    date.setDate(date.getDate() + 1);
+    date.setHours(9, 0, 0, 0);
+    return date;
+  }
+
+  const slashDate = source.match(/\b(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})(?:\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?)?\b/i);
+
+  if (slashDate) {
+    const month = Number(slashDate[1]) - 1;
+    const day = Number(slashDate[2]);
+    const year =
+      slashDate[3].length === 2
+        ? 2000 + Number(slashDate[3])
+        : Number(slashDate[3]);
+    let hour = slashDate[4] ? Number(slashDate[4]) : 9;
+    const minute = slashDate[5] ? Number(slashDate[5]) : 0;
+    const meridiem = (slashDate[6] || "").toLowerCase();
+
+    if (meridiem === "pm" && hour < 12) {
+      hour += 12;
+    }
+
+    if (meridiem === "am" && hour === 12) {
+      hour = 0;
+    }
+
+    const date = new Date(year, month, day, hour, minute);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  const monthDate = source.match(/\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\s+(\d{1,2})(?:,\s*(\d{4}))?(?:\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?)?\b/i);
+
+  if (monthDate) {
+    const months = {
+      jan: 0,
+      january: 0,
+      feb: 1,
+      february: 1,
+      mar: 2,
+      march: 2,
+      apr: 3,
+      april: 3,
+      may: 4,
+      jun: 5,
+      june: 5,
+      jul: 6,
+      july: 6,
+      aug: 7,
+      august: 7,
+      sep: 8,
+      sept: 8,
+      september: 8,
+      oct: 9,
+      october: 9,
+      nov: 10,
+      november: 10,
+      dec: 11,
+      december: 11,
+    };
+    const month = months[monthDate[1].toLowerCase()];
+    const day = Number(monthDate[2]);
+    const year = monthDate[3] ? Number(monthDate[3]) : now.getFullYear();
+    let hour = monthDate[4] ? Number(monthDate[4]) : 9;
+    const minute = monthDate[5] ? Number(monthDate[5]) : 0;
+    const meridiem = (monthDate[6] || "").toLowerCase();
+
+    if (meridiem === "pm" && hour < 12) {
+      hour += 12;
+    }
+
+    if (meridiem === "am" && hour === 12) {
+      hour = 0;
+    }
+
+    const date = new Date(year, month, day, hour, minute);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  return null;
+}
+
+function inferEventMetadata(message) {
+  const text = [
+    message.subject,
+    message.summary,
+    message.body,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const eventDateTime =
+    parseEventDateTime(message.eventDateTime) ||
+    inferEventDateFromText(text, message.receivedAt);
+
+  return {
+    eventTitle:
+      message.eventTitle ||
+      message.subject ||
+      "Email follow-up",
+    eventDateTime,
+    eventVenue: message.eventVenue || "",
+    eventNotes:
+      message.eventNotes ||
+      "Calendar event created from detected email date/details.",
+  };
 }
 
 function summarizeForFallback(message) {
@@ -708,7 +975,9 @@ export async function sendReplyEmail({ user, message, replyBody }) {
 }
 
 export async function createCalendarEvent({ user, message }) {
-  if (!message.eventDateTime) {
+  const inferred = inferEventMetadata(message);
+
+  if (!inferred.eventDateTime) {
     throw new Error("This ticket does not have a usable event date.");
   }
 
@@ -728,18 +997,18 @@ export async function createCalendarEvent({ user, message }) {
     version: "v3",
     auth: oauth2Client,
   });
-  const start = new Date(message.eventDateTime);
+  const start = new Date(inferred.eventDateTime);
   const end = new Date(start.getTime() + 60 * 60 * 1000);
   const event = await calendar.events.insert({
     calendarId: "primary",
     requestBody: {
       summary:
-        message.eventTitle ||
+        inferred.eventTitle ||
         message.subject ||
         "Support follow-up",
-      location: message.eventVenue || "",
+      location: inferred.eventVenue || "",
       description: [
-        message.eventNotes,
+        inferred.eventNotes,
         message.summary,
         message.subject ? `Source email: ${message.subject}` : "",
       ]
@@ -872,16 +1141,22 @@ export async function fetchAndAnalyzeMessages(userId) {
 
         const text =
           `${subject} ${body}`.toLowerCase();
+        const category = fallbackCategory(text);
+        const priority = fallbackPriority(text);
 
         analysis = {
-          category: fallbackCategory(text),
-          priority: fallbackPriority(text),
+          category,
+          priority,
           summary: subject || "Customer support request",
           sentiment: "Neutral",
+          emailType: fallbackEmailType(text, category),
+          emailTypeReason:
+            "Fallback email type used because AgentRouter analysis failed.",
           suggestedResponse: "",
           classificationReason:
             "Fallback classification used because AgentRouter analysis failed.",
-          isTicket: true
+          isTicket: true,
+          isActionable: priority !== "Low"
         };
 
         console.log(
@@ -912,6 +1187,12 @@ export async function fetchAndAnalyzeMessages(userId) {
         sentiment:
           analysis.sentiment,
 
+        emailType:
+          analysis.emailType || analysis.category || "Other",
+
+        emailTypeReason:
+          analysis.emailTypeReason || analysis.classificationReason || "",
+
         suggestedResponse:
           analysis.suggestedResponse,
 
@@ -935,6 +1216,9 @@ export async function fetchAndAnalyzeMessages(userId) {
 
         isTicket:
           analysis.isTicket,
+
+        isActionable:
+          analysis.isActionable,
 
         status: "Open",
       };
