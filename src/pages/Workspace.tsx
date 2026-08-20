@@ -2057,9 +2057,16 @@ function Workspace() {
                                 </div>
 
                                 <div className="ticket-meta">
-                                  {ticket.summary ||
-                                    "No summary"}
-                                </div>
+  {ticket.summary ||
+    "No summary"}
+</div>
+
+<div className="ai-insights-panel">
+  <strong>AI Insights</strong>
+  <div>Category: {ticket.category || "Other"}</div>
+  <div>Priority: {ticket.priority || "Medium"}</div>
+  <div>Sentiment: {ticket.sentiment || "Neutral"}</div>
+</div>
 
                                 {ticket.replySentAt && (
                                   <div className="ticket-meta">
@@ -3386,6 +3393,7 @@ function Workspace() {
 }
 
 export default Workspace;
+
 
 
 
