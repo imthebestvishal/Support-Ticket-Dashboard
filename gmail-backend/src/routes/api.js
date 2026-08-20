@@ -1,3 +1,4 @@
+import { analyzeTicket } from "../services/ticketIntelligenceService.js";
 import express from "express";
 import mongoose from "mongoose";
 import { User } from "../models/user.js";
@@ -107,6 +108,20 @@ router.get("/messages", requireAuth, async (req, res) => {
 router.post("/messages/fetch", requireAuth, async (req, res) => {
   try {
     const result = await fetchAndAnalyzeMessages(req.user._id);
+
+    for (const message of result) {
+
+      const ai = analyzeTicket(
+        `${message.subject || ""} ${message.body || ""}`
+      );
+
+      message.category = ai.category;
+      message.priority = ai.priority;
+      message.sentiment = ai.sentiment;
+      message.summary = ai.summary;
+
+      await message.save();
+    }
 
     res.send({
       count: result.length,
@@ -316,3 +331,6 @@ router.post("/messages/:id/send", requireAuth, async (req, res) => {
 });
 
 export { router as apiRouter };
+
+
+
