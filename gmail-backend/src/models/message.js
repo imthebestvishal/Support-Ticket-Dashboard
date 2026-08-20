@@ -88,6 +88,17 @@ const messageSchema = new mongoose.Schema(
       default: "",
     },
 
+    escalationRisk: {
+      type: String,
+      enum: ["Low", "Medium", "High"],
+      default: "Low",
+    },
+
+    escalationRecommendation: {
+      type: String,
+      default: "",
+    },
+
     isTicket: {
       type: Boolean,
       default: true,
@@ -105,3 +116,4 @@ const messageSchema = new mongoose.Schema(
 );
 
 export const Message = mongoose.model("Message", messageSchema);
+

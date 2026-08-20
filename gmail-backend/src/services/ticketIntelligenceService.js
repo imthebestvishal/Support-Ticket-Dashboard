@@ -75,11 +75,38 @@ export function analyzeTicket(message = "") {
   }
 
 
+  let escalationRisk = "Low";
+  let escalationRecommendation = "Handle normally";
+
+  if (
+    priority === "Urgent" ||
+    sentiment === "Negative" ||
+    text.includes("lawsuit") ||
+    text.includes("manager") ||
+    text.includes("complaint")
+  ) {
+    escalationRisk = "High";
+    escalationRecommendation =
+      "Escalate to senior support team immediately";
+  }
+  else if (
+    priority === "High" ||
+    text.includes("delay") ||
+    text.includes("issue")
+  ) {
+    escalationRisk = "Medium";
+    escalationRecommendation =
+      "Monitor closely and respond quickly";
+  }
+
+
   return {
     category,
     priority,
     sentiment,
     summary: message.substring(0,120),
+    escalationRisk,
+    escalationRecommendation,
   };
 }
 
@@ -89,3 +116,4 @@ export {
   ALLOWED_PRIORITIES,
   ALLOWED_SENTIMENTS
 };
+

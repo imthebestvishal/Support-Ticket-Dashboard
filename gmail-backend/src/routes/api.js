@@ -119,6 +119,8 @@ router.post("/messages/fetch", requireAuth, async (req, res) => {
       message.priority = ai.priority;
       message.sentiment = ai.sentiment;
       message.summary = ai.summary;
+      message.escalationRisk = ai.escalationRisk;
+      message.escalationRecommendation = ai.escalationRecommendation;
 
       await message.save();
     }
@@ -429,6 +431,7 @@ router.post("/messages/:id/send-reply", requireAuth, async (req, res) => {
 
 // Generate AI reply draft
 export { router as apiRouter };
+
 
 
 
