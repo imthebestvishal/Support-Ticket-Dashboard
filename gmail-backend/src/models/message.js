@@ -106,7 +106,7 @@ const messageSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["Open", "Pending", "In Progress", "Resolved", "Escalated"],
+      enum: ["Open", "Pending", "In Progress", "Resolved", "Escalated", "Deleted"],
       default: "Open",
     },
   },
@@ -116,4 +116,5 @@ const messageSchema = new mongoose.Schema(
 );
 
 export const Message = mongoose.model("Message", messageSchema);
+
 

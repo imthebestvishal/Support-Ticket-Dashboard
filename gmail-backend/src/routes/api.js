@@ -86,7 +86,7 @@ router.delete("/messages/:id", requireAuth, async (req, res) => {
       });
     }
 
-    message.status = "deleted";
+    message.status = "Deleted";
     message.deletedAt = new Date();
 
     await message.save();
@@ -464,6 +464,7 @@ router.post("/messages/:id/send-reply", requireAuth, async (req, res) => {
 
 // Generate AI reply draft
 export { router as apiRouter };
+
 
 
 
