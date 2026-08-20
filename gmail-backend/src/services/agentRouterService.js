@@ -1,4 +1,4 @@
-const DEFAULT_AGENT_ROUTER_MODEL = "gpt-5.5";
+const DEFAULT_AGENT_ROUTER_MODEL = "gpt-5.6-sol";
 const DEFAULT_AGENT_ROUTER_BASE_URL = "https://agentrouter.org/v1";
 const LAST_PROVIDER_STATUS = {
   httpStatus: null,
