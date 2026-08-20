@@ -1599,6 +1599,23 @@ function Workspace() {
 
   function showAlerts() {
     setActive("Dashboard");
+
+    if (deadlineNotifications.length > 0) {
+      const deadlineText =
+        deadlineNotifications
+          .map(
+            (ticket: Ticket) =>
+              `${ticket.subject || "Ticket"} (${ticket.deadlineStatus})`
+          )
+          .join(", ");
+
+      setTopbarNotice(
+        `Deadline Alerts: ${deadlineText}`
+      );
+
+      return;
+    }
+
     setTopbarNotice(
       `Alerts: ${highCount} high-priority ticket${highCount === 1 ? "" : "s"}, ${openCount} open ticket${openCount === 1 ? "" : "s"}, Gmail ${gmailStatus.toLowerCase()}.`
     );
@@ -3492,6 +3509,7 @@ function Workspace() {
 }
 
 export default Workspace;
+
 
 
 
