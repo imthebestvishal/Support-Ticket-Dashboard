@@ -111,9 +111,48 @@ export function analyzeTicket(message = "") {
 }
 
 
+
+export function extractDeadline(message = "") {
+
+  const text = message.toLowerCase();
+
+  let deadline = null;
+  let deadlineReason = "";
+
+  if (
+    text.includes("today") ||
+    text.includes("urgent") ||
+    text.includes("asap")
+  ) {
+    deadline = new Date(
+      Date.now() + 24 * 60 * 60 * 1000
+    );
+
+    deadlineReason =
+      "Customer requested urgent resolution";
+  }
+
+  if (text.includes("tomorrow")) {
+
+    deadline = new Date(
+      Date.now() + 48 * 60 * 60 * 1000
+    );
+
+    deadlineReason =
+      "Customer requested completion tomorrow";
+  }
+
+  return {
+    deadline,
+    deadlineReason,
+    deadlineStatus:
+      deadline ? "Upcoming" : "None"
+  };
+}
 export {
   ALLOWED_CATEGORIES,
   ALLOWED_PRIORITIES,
   ALLOWED_SENTIMENTS
 };
+
 

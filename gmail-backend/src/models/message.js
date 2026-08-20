@@ -99,6 +99,28 @@ const messageSchema = new mongoose.Schema(
       default: "",
     },
 
+    deadline: {
+      type: Date,
+      default: null,
+    },
+
+    deadlineReason: {
+      type: String,
+      default: "",
+    },
+
+    deadlineStatus: {
+      type: String,
+      enum: [
+        "None",
+        "Upcoming",
+        "Due Soon",
+        "Overdue",
+        "Completed"
+      ],
+      default: "None",
+    },
+
     isTicket: {
       type: Boolean,
       default: true,
@@ -116,5 +138,6 @@ const messageSchema = new mongoose.Schema(
 );
 
 export const Message = mongoose.model("Message", messageSchema);
+
 
 

@@ -1,4 +1,4 @@
-import { analyzeTicket } from "../services/ticketIntelligenceService.js";
+import { analyzeTicket, extractDeadline } from "../services/ticketIntelligenceService.js";
 import express from "express";
 import mongoose from "mongoose";
 import { User } from "../models/user.js";
@@ -154,6 +154,14 @@ router.post("/messages/fetch", requireAuth, async (req, res) => {
       message.summary = ai.summary;
       message.escalationRisk = ai.escalationRisk;
       message.escalationRecommendation = ai.escalationRecommendation;
+
+      const deadlineAI = extractDeadline(
+        `${message.subject || ""} ${message.body || ""}`
+      );
+
+      message.deadline = deadlineAI.deadline;
+      message.deadlineReason = deadlineAI.deadlineReason;
+      message.deadlineStatus = deadlineAI.deadlineStatus;
 
       await message.save();
     }
@@ -464,6 +472,8 @@ router.post("/messages/:id/send-reply", requireAuth, async (req, res) => {
 
 // Generate AI reply draft
 export { router as apiRouter };
+
+
 
 
 
