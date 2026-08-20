@@ -28,7 +28,6 @@ router.get("/google", (req, res) => {
     scope: [
       "https://www.googleapis.com/auth/gmail.readonly",
       "https://www.googleapis.com/auth/gmail.send",
-      "https://www.googleapis.com/auth/calendar",
     ],
 
     prompt: "consent",
@@ -170,4 +169,3 @@ router.get("/google/callback", async (req, res) => {
 });
 
 export { router as authRouter };
-

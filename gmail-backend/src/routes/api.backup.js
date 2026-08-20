@@ -1,5 +1,4 @@
 import { analyzeTicket, extractDeadline } from "../services/ticketIntelligenceService.js";
-import { createCalendarDeadline } from "../services/calendarService.js";
 import express from "express";
 import mongoose from "mongoose";
 import { User } from "../models/user.js";
@@ -163,31 +162,6 @@ router.post("/messages/fetch", requireAuth, async (req, res) => {
       message.deadline = deadlineAI.deadline;
       message.deadlineReason = deadlineAI.deadlineReason;
       message.deadlineStatus = deadlineAI.deadlineStatus;
-
-
-      if (deadlineAI.deadline) {
-
-        await createCalendarDeadline({
-
-          accessToken:
-            req.user.accessToken,
-
-          refreshToken:
-            req.user.refreshToken,
-
-          subject:
-            message.subject,
-
-          deadline:
-            deadlineAI.deadline,
-
-          reason:
-            deadlineAI.deadlineReason,
-
-        });
-
-      }
-
 
       await message.save();
     }
@@ -498,8 +472,6 @@ router.post("/messages/:id/send-reply", requireAuth, async (req, res) => {
 
 // Generate AI reply draft
 export { router as apiRouter };
-
-
 
 
 
