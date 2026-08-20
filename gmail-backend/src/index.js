@@ -30,6 +30,12 @@ for (const key of [
 const app = express();
 const port = process.env.PORT || 5000;
 const isProduction = process.env.NODE_ENV === "production";
+const sessionStore =
+  isProduction && process.env.MONGO_URI
+    ? MongoStore.create({
+        mongoUrl: process.env.MONGO_URI,
+      })
+    : undefined;
 const agentRouterStatus = getAgentRouterStatus();
 
 console.log(
@@ -79,9 +85,7 @@ app.use(
     saveUninitialized: false,
 
     name: "gmail.sid",
-    store: MongoStore.create({
-      mongoUrl: process.env.MONGO_URI,
-    }),
+    ...(sessionStore ? { store: sessionStore } : {}),
 
     cookie: {
       httpOnly: true,
