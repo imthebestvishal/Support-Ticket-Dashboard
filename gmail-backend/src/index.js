@@ -8,6 +8,7 @@ import session from "express-session";
 
 import { authRouter } from "./routes/auth.js";
 import { apiRouter } from "./routes/api.js";
+import { knowledgeRouter } from "./routes/knowledge.js";
 
 dotenv.config();
 
@@ -83,6 +84,7 @@ mongoose
 
 app.use("/auth", authRouter);
 app.use("/api", apiRouter);
+app.use("/api/knowledge", knowledgeRouter);
 
 app.get("/", (req, res) => {
   res.send({

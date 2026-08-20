@@ -1,9 +1,14 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { authClient } from "../lib/auth";
 
 export default function Auth() {
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const from =
+    (location.state as { from?: { pathname?: string } })?.from?.pathname ||
+    "/dashboard";
 
   const [view, setView] = useState<"signin" | "signup">("signin");
   const [name, setName] = useState("");
@@ -15,12 +20,21 @@ export default function Auth() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    const mode = new URLSearchParams(location.search).get("mode");
+    if (mode === "signup" || mode === "signin") {
+      setView(mode);
+      setError("");
+      setMessage("");
+    }
+  }, [location.search]);
+
+  useEffect(() => {
     const checkSession = async () => {
       try {
         const result = await authClient.getSession();
 
         if (result?.data?.session) {
-          navigate("/account", { replace: true });
+          navigate(from, { replace: true });
         }
       } catch (err) {
         console.error("Session check failed:", err);
@@ -28,7 +42,7 @@ export default function Auth() {
     };
 
     checkSession();
-  }, [navigate]);
+  }, [navigate, from]);
 
   const handleSubmit = async (
     event: React.FormEvent<HTMLFormElement>,
@@ -69,7 +83,7 @@ export default function Auth() {
 
         setMessage("Signed in successfully.");
 
-        navigate("/account", { replace: true });
+        navigate(from, { replace: true });
       }
     } catch (err: any) {
       console.error("Authentication error:", err);
@@ -96,15 +110,20 @@ export default function Auth() {
 
           <p className="page-copy">
             {view === "signin"
-              ? "Sign in to continue to your workspace."
-              : "Create an account to get started with your workspace."}
+              ? "Sign in to continue to your support operations workspace."
+              : "Create an account to get started with your support workspace."}
           </p>
         </div>
       </div>
 
       <div className="auth-card-grid">
         <div className="auth-card">
-          <div className="action-row">
+          <div
+            className={`action-row auth-toggle-row ${
+              view === "signup" ? "is-signup" : "is-signin"
+            }`}
+          >
+            <span className="action-row-indicator" aria-hidden="true" />
             <button
               type="button"
               onClick={() => {
@@ -146,8 +165,7 @@ export default function Auth() {
             <div className="form-grid">
               {view === "signup" && (
                 <label>
-                  Name
-
+                  Full Name
                   <input
                     type="text"
                     value={name}
@@ -155,15 +173,14 @@ export default function Auth() {
                       setName(event.target.value)
                     }
                     className="field"
-                    placeholder="Your name"
+                    placeholder="Support Specialist"
                     required
                   />
                 </label>
               )}
 
               <label>
-                Email
-
+                Email Address
                 <input
                   type="email"
                   value={email}
@@ -171,14 +188,13 @@ export default function Auth() {
                     setEmail(event.target.value)
                   }
                   className="field"
-                  placeholder="you@example.com"
+                  placeholder="agent@company.com"
                   required
                 />
               </label>
 
               <label>
                 Password
-
                 <input
                   type="password"
                   value={password}
@@ -186,7 +202,7 @@ export default function Auth() {
                     setPassword(event.target.value)
                   }
                   className="field"
-                  placeholder="••••••••"
+                  placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
                   required
                 />
               </label>
@@ -195,15 +211,15 @@ export default function Auth() {
                 {loading
                   ? "Please wait..."
                   : view === "signin"
-                    ? "Login"
-                    : "Create Account"}
+                    ? "Login to Workspace"
+                    : "Create Agent Account"}
               </button>
             </div>
           </form>
         </div>
 
         <div className="auth-summary-card">
-          <h2>Your workspace</h2>
+          <h2>Support Workspace</h2>
 
           <div className="summary-item-row">
             <div>
@@ -219,13 +235,13 @@ export default function Auth() {
 
           <div className="summary-item-row">
             <div>
-              <span>Account</span>
-              <strong>Personal</strong>
+              <span>AI Engine</span>
+              <strong>Gemini 2.5</strong>
             </div>
 
             <div>
-              <span>Status</span>
-              <strong>Ready</strong>
+              <span>Database</span>
+              <strong>MongoDB</strong>
             </div>
           </div>
         </div>

@@ -63,6 +63,31 @@ const messageSchema = new mongoose.Schema(
       default: "",
     },
 
+    editedReply: {
+      type: String,
+      default: "",
+    },
+
+    sentAt: {
+      type: Date,
+      default: null,
+    },
+
+    isEscalated: {
+      type: Boolean,
+      default: false,
+    },
+
+    escalatedAt: {
+      type: Date,
+      default: null,
+    },
+
+    escalationReason: {
+      type: String,
+      default: "",
+    },
+
     isTicket: {
       type: Boolean,
       default: true,
@@ -70,7 +95,7 @@ const messageSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["Open", "In Progress", "Resolved"],
+      enum: ["Open", "Pending", "In Progress", "Resolved", "Escalated"],
       default: "Open",
     },
   },

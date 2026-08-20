@@ -1,37 +1,87 @@
+import { useEffect } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 
-import Home from "./pages/home";
+import Landing from "./pages/Landing";
 import Auth from "./pages/auth";
-import Account from "./pages/account";
-
+import Home from "./pages/home";
 import Dashboard from "./pages/dashboard";
 import Gmail from "./pages/gmail";
 import KnowledgeBase from "./pages/knowledge-base";
 import Settings from "./pages/settings";
+import Account from "./pages/account";
 
 import Layout from "./components/Layout";
+import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
+  useEffect(() => {
+    // Initialize theme from storage
+    const theme = localStorage.getItem("theme") || "light";
+    document.documentElement.classList.toggle("dark-theme", theme === "dark");
+    document.body.classList.toggle("dark-theme", theme === "dark");
+  }, []);
+
   return (
     <Layout>
       <Routes>
+        {/* PUBLIC LANDING PAGE */}
+        <Route path="/" element={<Landing />} />
 
-        {/* FIRST PAGE = LOGIN / SIGN UP */}
-        <Route path="/" element={<Auth />} />
-
-        {/* Authentication page */}
+        {/* AUTHENTICATION */}
         <Route path="/auth" element={<Auth />} />
 
-        {/* Application pages */}
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/gmail" element={<Gmail />} />
-        <Route path="/knowledge-base" element={<KnowledgeBase />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="/account" element={<Account />} />
+        {/* PROTECTED APPLICATION WORKSPACE ROUTES */}
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/home"
+          element={
+            <ProtectedRoute>
+              <Home />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/gmail"
+          element={
+            <ProtectedRoute>
+              <Gmail />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/knowledge-base"
+          element={
+            <ProtectedRoute>
+              <KnowledgeBase />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <ProtectedRoute>
+              <Settings />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/account"
+          element={
+            <ProtectedRoute>
+              <Account />
+            </ProtectedRoute>
+          }
+        />
 
-        {/* Unknown URL -> Login / Sign Up */}
+        {/* FALLBACK -> Landing Page */}
         <Route path="*" element={<Navigate to="/" replace />} />
-
       </Routes>
     </Layout>
   );

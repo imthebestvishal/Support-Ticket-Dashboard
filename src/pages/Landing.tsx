@@ -1,0 +1,344 @@
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import ScrollShowcase from "../components/ScrollShowcase";
+import { authClient } from "../lib/auth";
+
+type LandingTab = "Home" | "Features" | "Help Center" | "About";
+
+const featureHighlights = [
+  {
+    kicker: "Deadline alarms",
+    title: "Alarm for deadline tasks",
+    copy: "Surface time-sensitive tickets before they slip, with a clean reminder workflow for support tasks.",
+  },
+  {
+    kicker: "Volume alerts",
+    title: "High-volume email notification",
+    copy: "Call attention to sudden inbox spikes so the team can react before queues become noisy.",
+  },
+  {
+    kicker: "Calendar-ready",
+    title: "Add ticket deadlines to calendar",
+    copy: "Keep customer follow-ups visible by turning important ticket deadlines into calendar moments.",
+  },
+];
+
+const helpCenterFaqs = [
+  {
+    question: "How does SupportHub integrate with Gmail?",
+    answer:
+      "SupportHub connects seamlessly via Google OAuth 2.0 and official Gmail APIs to analyze support emails, categorize them automatically into 6 priority types, and generate AI-driven summaries without storing sensitive credentials.",
+  },
+  {
+    question: "How does AI Email Categorization work?",
+    answer:
+      "Our AI engine inspects incoming email subjects, body copy, and sender metadata to classify messages into Social, Financial, Technical, Promotions, Feature Requests, and General support categories.",
+  },
+  {
+    question: "How do I create and manage tickets?",
+    answer:
+      "You can create manual tickets from the Workspace dashboard or convert incoming emails into tracked tickets with assigned priority levels (Urgent, High, Medium, Low) and live status tracking.",
+  },
+  {
+    question: "What capabilities does the AI Assistant offer?",
+    answer:
+      "The integrated Gemini AI provides real-time intelligent insights over your support data, tone refinement (Formal, Friendly, Shorten, Simplify), and context-aware Knowledge Base integration.",
+  },
+];
+
+const projectHighlights = [
+  {
+    title: "AI-Powered Triage",
+    desc: "Automated email classification and priority detection powered by Google Gemini AI.",
+  },
+  {
+    title: "Real-Time Workspace",
+    desc: "Dynamic live metrics, stat breakdown cards, deadline tracking, and 3-column ticket workflow.",
+  },
+  {
+    title: "Theme Customization",
+    desc: "Complete Light & Dark mode visual themes with dedicated dark PNG icon assets.",
+  },
+  {
+    title: "Tech Stack",
+    desc: "React 18, TypeScript, Vite, Node.js, Express, MongoDB, Google OAuth 2.0 & Gemini API.",
+  },
+];
+
+function Logo() {
+  return (
+    <Link to="/" className="landing-logo" aria-label="SupportHub home">
+      <img
+        src="/assets/brand-logo.png"
+        alt="SupportHub Logo"
+        style={{ height: "42px", maxWidth: "100%", objectFit: "contain" }}
+      />
+    </Link>
+  );
+}
+
+export default function Landing() {
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<LandingTab>("Home");
+  const [isHeaderHidden, setIsHeaderHidden] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    async function checkAuth() {
+      try {
+        const sessionResult = await authClient.getSession();
+        if (sessionResult?.data?.session) {
+          setIsAuthenticated(true);
+        }
+      } catch {
+        setIsAuthenticated(false);
+      }
+    }
+    checkAuth();
+  }, []);
+
+  const scrollToSection = (sectionId: string, tabName: LandingTab) => {
+    setActiveTab(tabName);
+    const element = document.getElementById(sectionId);
+    if (element) {
+      const yOffset = -70;
+      const y = element.getBoundingClientRect().top + window.pageYOffset + yOffset;
+      window.scrollTo({ top: y, behavior: "smooth" });
+    }
+  };
+
+  useEffect(() => {
+    const animatedNodes = Array.from(
+      document.querySelectorAll<HTMLElement>(".scroll-reveal")
+    );
+
+    if (animatedNodes.length === 0) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("is-visible");
+          }
+        });
+      },
+      {
+        rootMargin: "0px 0px -12% 0px",
+        threshold: 0.18,
+      }
+    );
+
+    animatedNodes.forEach((node) => observer.observe(node));
+
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const handleScrollSpy = () => {
+      setIsHeaderHidden(window.scrollY > 8);
+
+      const sections: { id: string; tab: LandingTab }[] = [
+        { id: "home", tab: "Home" },
+        { id: "features", tab: "Features" },
+        { id: "help-center", tab: "Help Center" },
+        { id: "about", tab: "About" },
+      ];
+
+      const scrollPosition = window.scrollY + 140;
+
+      for (const section of sections) {
+        const el = document.getElementById(section.id);
+        if (el) {
+          const top = el.offsetTop;
+          const height = el.offsetHeight;
+          if (scrollPosition >= top && scrollPosition < top + height) {
+            setActiveTab(section.tab);
+            break;
+          }
+        }
+      }
+    };
+
+    window.addEventListener("scroll", handleScrollSpy, { passive: true });
+    handleScrollSpy();
+
+    return () => window.removeEventListener("scroll", handleScrollSpy);
+  }, []);
+
+  return (
+    <main className="landing-page-container minimal-landing">
+      <header className={`landing-header${isHeaderHidden ? " is-hidden" : ""}`}>
+        <Logo />
+
+        <div className="landing-tab-bar" aria-label="Landing navigation tabs">
+          {[
+            { name: "Home", id: "home" },
+            { name: "Features", id: "features" },
+            { name: "Help Center", id: "help-center" },
+            { name: "About", id: "about" },
+          ].map((tab) => (
+            <button
+              key={tab.name}
+              type="button"
+              className={`landing-tab-item${activeTab === tab.name ? " is-active" : ""}`}
+              onClick={() => scrollToSection(tab.id, tab.name as LandingTab)}
+            >
+              {tab.name}
+            </button>
+          ))}
+        </div>
+
+        <nav className="landing-nav" aria-label="Landing navigation">
+          {isAuthenticated ? (
+            <Link to="/dashboard" className="nav-signup-button">
+              Open Workspace →
+            </Link>
+          ) : (
+            <>
+              <Link to="/auth?mode=signin" className="nav-signin-link">
+                Sign In
+              </Link>
+              <Link to="/auth?mode=signup" className="nav-signup-button">
+                Sign Up
+              </Link>
+            </>
+          )}
+        </nav>
+      </header>
+
+      {/* SECTION 1: HOME */}
+      <section id="home" className="landing-section-block">
+        <ScrollShowcase
+          totalFrames={180}
+          imagePath={(index) => `/assets/sequence/${String(index).padStart(5, "0")}.png`}
+        />
+      </section>
+
+      {/* SECTION 2: FEATURES */}
+      <section id="features" className="landing-section-block landing-feature-band">
+        <div className="landing-section-heading scroll-reveal">
+          <h2>The next support actions stay visible.</h2>
+          <p>
+            SupportHub turns Gmail conversations into prioritized support tickets with AI summaries,
+            reply assistance, deadline awareness, and team-ready follow-up signals.
+          </p>
+        </div>
+
+        <div className="landing-feature-grid" style={{ marginBottom: "50px" }}>
+          {featureHighlights.map((feature, index) => (
+            <article
+              className="landing-feature-card scroll-reveal"
+              style={{ transitionDelay: `${index * 90}ms` }}
+              key={feature.title}
+            >
+              <span className="feature-number">{String(index + 1).padStart(2, "0")}</span>
+              <p>{feature.kicker}</p>
+              <h3>{feature.title}</h3>
+              <span>{feature.copy}</span>
+            </article>
+          ))}
+        </div>
+
+        <div className="landing-tab-view landing-features-view">
+          <div className="tab-hero-heading scroll-reveal">
+            <p className="eyebrow">FEATURES & CAPABILITIES</p>
+            <h2>Intelligent Support Operations</h2>
+            <p className="subtitle">
+              Discover how SupportHub automates customer email triage, priority categorization, and task reminders.
+            </p>
+          </div>
+
+          <div className="features-deep-grid scroll-reveal">
+            <div className="deep-feature-card">
+              <div className="feature-icon-badge">📩</div>
+              <h3>Gmail AI Auto-Categorization</h3>
+              <p>
+                Automatically classifies incoming messages into distinct categories: Social, Financial, Technical, Promotions, Feature Requests, and General support.
+              </p>
+            </div>
+
+            <div className="deep-feature-card">
+              <div className="feature-icon-badge">📊</div>
+              <h3>Live Support Analytics</h3>
+              <p>
+                Real-time total tickets count, resolution rates, high-priority alert cards, and dynamic category breakdown charts with zero hardcoding.
+              </p>
+            </div>
+
+            <div className="deep-feature-card">
+              <div className="feature-icon-badge">🤖</div>
+              <h3>AI Reply Refinement & Knowledge Base</h3>
+              <p>
+                Rewrite responses with custom tones (Formal, Friendly, Shorten, Simplify) and inject relevant standard knowledge base documentation with 1-click.
+              </p>
+            </div>
+
+            <div className="deep-feature-card">
+              <div className="feature-icon-badge">⏰</div>
+              <h3>Tier 2 Escalations & Gmail Dispatch</h3>
+              <p>
+                Escalate complex tickets to engineering with structured reason logging, and send resolved responses directly back through authorized Gmail.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* SECTION 3: HELP CENTER */}
+      <section id="help-center" className="landing-section-block landing-tab-view landing-help-view">
+        <div className="tab-hero-heading scroll-reveal">
+          <p className="eyebrow">HELP CENTER & FAQ</p>
+          <h2>How SupportHub Works</h2>
+          <p className="subtitle">
+            Everything you need to know about setting up Gmail integration, managing tickets, and AI data security.
+          </p>
+        </div>
+
+        <div className="faq-list scroll-reveal">
+          {helpCenterFaqs.map((faq, i) => (
+            <div className="faq-item" key={i}>
+              <h3>{faq.question}</h3>
+              <p>{faq.answer}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* SECTION 4: ABOUT */}
+      <section id="about" className="landing-section-block landing-tab-view landing-about-view">
+        <div className="tab-hero-heading scroll-reveal">
+          <p className="eyebrow">ABOUT SUPPORTHUB</p>
+          <h2>Empowering Support Teams with AI</h2>
+          <p className="subtitle">
+            SupportHub is an intelligent support dashboard built to streamline email triage, prioritize customer urgency, and eliminate manual queue management.
+          </p>
+        </div>
+
+        <div className="about-grid scroll-reveal">
+          {projectHighlights.map((item, i) => (
+            <div className="about-card" key={i}>
+              <h3>{item.title}</h3>
+              <p>{item.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* CLOSING HERO CTA */}
+      <section className="landing-closing scroll-reveal">
+        <h2>Built for scanning, triage, and action.</h2>
+        <button
+          onClick={() => navigate(isAuthenticated ? "/dashboard" : "/auth?mode=signup")}
+          className="hero-cta-button"
+        >
+          <span>{isAuthenticated ? "Open Workspace" : "Start with SupportHub"}</span>
+          <span className="arrow-icon" aria-hidden="true">
+            →
+          </span>
+        </button>
+      </section>
+    </main>
+  );
+}

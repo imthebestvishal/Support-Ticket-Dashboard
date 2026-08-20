@@ -1,7 +1,12 @@
 import express from "express";
+import mongoose from "mongoose";
 import { User } from "../models/user.js";
 import { Message } from "../models/message.js";
-import { fetchAndAnalyzeMessages } from "../services/gmailService.js";
+import {
+  fetchAndAnalyzeMessages,
+  sendGmailReply,
+  refineSupportReply,
+} from "../services/gmailService.js";
 
 const router = express.Router();
 
@@ -30,6 +35,18 @@ const requireAuth = async (req, res, next) => {
       error: "Authentication error",
     });
   }
+};
+
+const findUserMessage = async (idParam, userId) => {
+  if (!idParam) return null;
+  const cleanId = String(idParam).replace(/^TICKET-/, "").trim();
+
+  if (mongoose.Types.ObjectId.isValid(cleanId)) {
+    const byObjectId = await Message.findOne({ _id: cleanId, userId });
+    if (byObjectId) return byObjectId;
+  }
+
+  return await Message.findOne({ gmailMessageId: cleanId, userId });
 };
 
 // Gmail connection status
@@ -83,6 +100,200 @@ router.post("/messages/fetch", requireAuth, async (req, res) => {
 
     res.status(500).send({
       error: error.message || "Failed to fetch Gmail messages",
+    });
+  }
+});
+
+// Update ticket status
+router.patch("/messages/:id/status", requireAuth, async (req, res) => {
+  try {
+    const { status } = req.body;
+    const allowedStatuses = [
+      "Open",
+      "Pending",
+      "In Progress",
+      "Resolved",
+      "Escalated",
+    ];
+
+    if (!status || !allowedStatuses.includes(status)) {
+      return res.status(400).send({
+        error: `Invalid status. Allowed values are: ${allowedStatuses.join(", ")}`,
+      });
+    }
+
+    const message = await findUserMessage(req.params.id, req.user._id);
+
+    if (!message) {
+      return res.status(404).send({
+        error: "Message not found",
+      });
+    }
+
+    message.status = status;
+    await message.save();
+
+    res.send(message);
+  } catch (error) {
+    console.error("Failed to update status:", error);
+
+    res.status(500).send({
+      error: error.message || "Failed to update status",
+    });
+  }
+});
+
+// Update ticket reply draft
+router.put("/messages/:id/reply", requireAuth, async (req, res) => {
+  try {
+    const reply =
+      req.body?.reply ??
+      req.body?.editedReply ??
+      req.body?.suggestedResponse;
+
+    if (typeof reply !== "string") {
+      return res.status(400).send({
+        error: "Missing or invalid reply in request body",
+      });
+    }
+
+    const message = await findUserMessage(req.params.id, req.user._id);
+
+    if (!message) {
+      return res.status(404).send({
+        error: "Message not found",
+      });
+    }
+
+    message.editedReply = reply;
+    message.suggestedResponse = reply;
+    await message.save();
+
+    res.send(message);
+  } catch (error) {
+    console.error("Failed to update reply:", error);
+
+    res.status(500).send({
+      error: error.message || "Failed to update reply",
+    });
+  }
+});
+
+// Refine ticket reply draft with AI (Gemini)
+router.post("/messages/:id/refine", requireAuth, async (req, res) => {
+  try {
+    const { tone, reply, kbSnippet } = req.body;
+    const message = await findUserMessage(req.params.id, req.user._id);
+
+    if (!message) {
+      return res.status(404).send({
+        error: "Message not found",
+      });
+    }
+
+    const currentReply =
+      reply || message.editedReply || message.suggestedResponse || "";
+
+    const refinedText = await refineSupportReply({
+      replyText: currentReply,
+      tone: tone || "formal",
+      subject: message.subject,
+      customerMessage: message.body,
+      kbSnippet,
+    });
+
+    res.send({
+      refinedReply: refinedText,
+    });
+  } catch (error) {
+    console.error("Failed to refine reply with AI:", error);
+
+    res.status(500).send({
+      error: error.message || "Failed to refine reply with AI",
+    });
+  }
+});
+
+// Escalate ticket
+router.post("/messages/:id/escalate", requireAuth, async (req, res) => {
+  try {
+    const message = await findUserMessage(req.params.id, req.user._id);
+
+    if (!message) {
+      return res.status(404).send({
+        error: "Message not found",
+      });
+    }
+
+    message.isEscalated = true;
+    message.escalatedAt = new Date();
+    message.status = "Escalated";
+
+    if (req.body?.reason && typeof req.body.reason === "string") {
+      message.escalationReason = req.body.reason;
+    }
+
+    await message.save();
+
+    res.send(message);
+  } catch (error) {
+    console.error("Failed to escalate ticket:", error);
+
+    res.status(500).send({
+      error: error.message || "Failed to escalate ticket",
+    });
+  }
+});
+
+// Send Gmail reply for ticket
+router.post("/messages/:id/send", requireAuth, async (req, res) => {
+  try {
+    const reply =
+      req.body?.reply ??
+      req.body?.editedReply ??
+      req.body?.suggestedResponse;
+
+    if (!reply || typeof reply !== "string" || !reply.trim()) {
+      return res.status(400).send({
+        error: "Missing or empty reply text in request body",
+      });
+    }
+
+    const message = await findUserMessage(req.params.id, req.user._id);
+
+    if (!message) {
+      return res.status(404).send({
+        error: "Message not found",
+      });
+    }
+
+    const trimmedReply = reply.trim();
+    const sendResult = await sendGmailReply(
+      req.user._id,
+      message,
+      trimmedReply,
+    );
+
+    message.sentAt = new Date();
+    message.editedReply = trimmedReply;
+    message.suggestedResponse = trimmedReply;
+    message.status = "Resolved";
+    await message.save();
+
+    res.send({
+      message: "Reply sent successfully via Gmail",
+      ticket: message,
+      sendResult: {
+        id: sendResult?.id,
+        threadId: sendResult?.threadId,
+      },
+    });
+  } catch (error) {
+    console.error("Failed to send Gmail reply:", error);
+
+    const statusCode = error.statusCode || 500;
+    res.status(statusCode).send({
+      error: error.message || "Failed to send reply via Gmail",
     });
   }
 });

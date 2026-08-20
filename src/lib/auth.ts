@@ -1,9 +1,8 @@
 import { createAuthClient } from "@neondatabase/neon-js/auth";
 
-const authUrl = import.meta.env.VITE_NEON_AUTH_URL;
+const defaultAuthUrl =
+  "https://ep-withered-sun-axmlzlaa.neonauth.c-4.us-east-2.aws.neon.tech/neondb/auth";
 
-if (!authUrl) {
-  throw new Error("VITE_NEON_AUTH_URL is not configured");
-}
+const authUrl = import.meta.env.VITE_NEON_AUTH_URL || defaultAuthUrl;
 
 export const authClient = createAuthClient(authUrl);

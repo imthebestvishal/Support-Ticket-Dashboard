@@ -359,3 +359,223 @@ export async function fetchAndAnalyzeMessages(userId) {
 
   return results;
 }
+
+/*
+|--------------------------------------------------------------------------
+| Send Gmail reply for an existing ticket/message
+|--------------------------------------------------------------------------
+*/
+
+export async function sendGmailReply(userId, ticketOrMessage, replyText) {
+  const user = await User.findById(userId);
+
+  if (!user) {
+    const error = new Error("User not found");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (!user.accessToken && !user.refreshToken) {
+    const error = new Error("Gmail account is not authenticated");
+    error.statusCode = 401;
+    throw error;
+  }
+
+  const gmail = await getGmailClient(user);
+
+  let originalThreadId = null;
+  let originalMessageIdHeader = null;
+  let originalSubject = ticketOrMessage.subject || "";
+  let recipient = ticketOrMessage.sender || "";
+
+  // Attempt to fetch original message metadata from Gmail for threading & headers
+  if (ticketOrMessage.gmailMessageId) {
+    try {
+      const origRes = await gmail.users.messages.get({
+        userId: "me",
+        id: ticketOrMessage.gmailMessageId,
+        format: "metadata",
+        metadataHeaders: ["Message-ID", "Subject", "From", "To", "References"],
+      });
+
+      if (origRes.data) {
+        originalThreadId = origRes.data.threadId || null;
+        const headers = origRes.data.payload?.headers || [];
+        originalMessageIdHeader = getHeader(headers, "Message-ID");
+        const headerSubject = getHeader(headers, "Subject");
+        if (headerSubject) {
+          originalSubject = headerSubject;
+        }
+        const headerFrom = getHeader(headers, "From");
+        if (headerFrom) {
+          recipient = headerFrom;
+        }
+      }
+    } catch (metadataError) {
+      console.warn(
+        "Could not fetch metadata for original Gmail message, proceeding with stored details:",
+        metadataError.message
+      );
+    }
+  }
+
+  if (!recipient) {
+    const error = new Error("No recipient email address found for this ticket");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const replySubject = /^re:\s*/i.test(originalSubject)
+    ? originalSubject
+    : `Re: ${originalSubject || "Support Ticket"}`;
+
+  const emailLines = [];
+  emailLines.push(`To: ${recipient}`);
+  emailLines.push(`From: ${user.email}`);
+  emailLines.push(`Subject: ${replySubject}`);
+
+  if (originalMessageIdHeader) {
+    emailLines.push(`In-Reply-To: ${originalMessageIdHeader}`);
+    emailLines.push(`References: ${originalMessageIdHeader}`);
+  }
+
+  emailLines.push("MIME-Version: 1.0");
+  emailLines.push("Content-Type: text/plain; charset=UTF-8");
+  emailLines.push("Content-Transfer-Encoding: 7bit");
+  emailLines.push("");
+  emailLines.push(replyText);
+
+  const emailRaw = emailLines.join("\r\n");
+  const encodedRaw = Buffer.from(emailRaw, "utf8")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+
+  const requestBody = {
+    raw: encodedRaw,
+  };
+
+  if (originalThreadId) {
+    requestBody.threadId = originalThreadId;
+  }
+
+  try {
+    const sendResponse = await gmail.users.messages.send({
+      userId: "me",
+      requestBody,
+    });
+
+    console.log(`Gmail reply sent successfully: id=${sendResponse.data?.id}`);
+    return sendResponse.data;
+  } catch (error) {
+    console.error("Gmail send error:", error.message);
+
+    const isScopeError =
+      error.status === 403 ||
+      error.code === 403 ||
+      error.message?.includes("insufficient") ||
+      error.message?.includes("scope") ||
+      error.message?.includes("PERMISSION_DENIED");
+
+    if (isScopeError) {
+      const scopeError = new Error(
+        "Gmail send permission is missing. Please reconnect your Gmail account to grant send access."
+      );
+      scopeError.statusCode = 403;
+      throw scopeError;
+    }
+
+    if (error.status === 401 || error.code === 401) {
+      const authError = new Error(
+        "Gmail authentication has expired. Please reconnect your Gmail account."
+      );
+      authError.statusCode = 401;
+      throw authError;
+    }
+
+    throw error;
+  }
+}
+
+/*
+|--------------------------------------------------------------------------
+| Refine Support Reply with Gemini
+|--------------------------------------------------------------------------
+*/
+
+export async function refineSupportReply({
+  replyText,
+  tone,
+  subject,
+  customerMessage,
+  kbSnippet,
+}) {
+  if (!GEMINI_API_KEY) {
+    throw new Error("GEMINI_API_KEY is not configured");
+  }
+
+  let toneInstruction = "Improve and polish this support reply for clarity and helpfulness.";
+  if (tone === "formal") {
+    toneInstruction = "Rewrite this customer support email to be highly professional, formal, respectful, and polished.";
+  } else if (tone === "friendly") {
+    toneInstruction = "Rewrite this customer support email to be warm, empathetic, approachable, friendly, and supportive.";
+  } else if (tone === "shorten") {
+    toneInstruction = "Shorten and condense this support email to be concise, clear, and direct without losing key solutions.";
+  } else if (tone === "simplify") {
+    toneInstruction = "Simplify this support email using plain, clear language and easy-to-follow steps.";
+  } else if (tone === "include_kb" && kbSnippet) {
+    toneInstruction = `Seamlessly incorporate the following verified knowledge base article snippet into the response:\n${kbSnippet}`;
+  }
+
+  const prompt = `
+You are an expert customer support agent.
+Customer Subject: ${subject || "Support Inquiry"}
+Customer Message: ${customerMessage || "N/A"}
+Current Draft Reply:
+${replyText}
+
+Instruction:
+${toneInstruction}
+
+Return ONLY the rewritten response text. Do not wrap in markdown quotes or code blocks.
+`;
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              {
+                text: prompt,
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.3,
+        },
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Gemini API error ${response.status}: ${errorText}`);
+  }
+
+  const data = await response.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+  if (!text) {
+    throw new Error("Gemini returned an empty response");
+  }
+
+  return text.trim();
+}
