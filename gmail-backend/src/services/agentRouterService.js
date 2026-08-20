@@ -1,5 +1,5 @@
-const DEFAULT_AGENT_ROUTER_MODEL = "agentrouter/gpt-5";
-const DEFAULT_AGENT_ROUTER_BASE_URL = "https://agentrouter.org/v1";
+const DEFAULT_AGENT_ROUTER_MODEL = "gpt-5.5";
+const DEFAULT_AGENT_ROUTER_BASE_URL = "https://co.agentrouter.org/v1";
 const LAST_PROVIDER_STATUS = {
   httpStatus: null,
   contentType: "",
@@ -66,10 +66,16 @@ function getAgentRouterToken() {
 }
 
 function getAgentRouterBaseUrl() {
-  return (
+  const configuredBaseUrl = (
     process.env.AGENT_ROUTER_BASE_URL ||
     DEFAULT_AGENT_ROUTER_BASE_URL
   ).replace(/\/+$/, "");
+
+  if (configuredBaseUrl === "https://agentrouter.org/v1") {
+    return DEFAULT_AGENT_ROUTER_BASE_URL;
+  }
+
+  return configuredBaseUrl;
 }
 
 export function isAgentRouterConfigured() {
@@ -77,10 +83,16 @@ export function isAgentRouterConfigured() {
 }
 
 export function getAgentRouterModel() {
-  return (
+  const configuredModel = (
     process.env.AGENT_ROUTER_MODEL ||
     DEFAULT_AGENT_ROUTER_MODEL
   );
+
+  if (configuredModel === "agentrouter/gpt-5") {
+    return DEFAULT_AGENT_ROUTER_MODEL;
+  }
+
+  return configuredModel;
 }
 
 export function getAgentRouterStatus() {
