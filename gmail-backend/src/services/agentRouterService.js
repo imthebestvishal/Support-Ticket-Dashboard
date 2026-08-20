@@ -44,6 +44,16 @@ export function getAgentRouterModel() {
   return AGENT_ROUTER_MODEL;
 }
 
+export function getAgentRouterStatus() {
+  return {
+    configured: Boolean(isAgentRouterConfigured()),
+    model: AGENT_ROUTER_MODEL,
+    baseUrl: AGENT_ROUTER_BASE_URL,
+    tokenPresent: Boolean(AGENT_ROUTER_TOKEN),
+    tokenLength: AGENT_ROUTER_TOKEN?.length || 0,
+  };
+}
+
 export async function askAgentRouter({
   messages,
   temperature = 0.2,

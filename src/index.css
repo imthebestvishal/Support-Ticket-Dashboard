@@ -5298,6 +5298,14 @@ select {
   margin-bottom: 10px;
 }
 
+.assistant-provider-error {
+  color: #b42318;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+  margin: -2px 0 12px;
+}
+
 .new-chat-reset-btn {
   margin-top: 14px;
   padding: 8px 14px;

@@ -302,6 +302,34 @@ function renderAssistantAnswer(answer: string) {
     });
 }
 
+function getAssistantSourceLabel(data: {
+  source?: string;
+  model?: string;
+  providerError?: string;
+  providerStatus?: {
+    configured?: boolean;
+  };
+}) {
+  if (data.source === "agentrouter") {
+    return `AgentRouter · ${data.model || "configured model"}`;
+  }
+
+  if (data.source !== "local-fallback") {
+    return "";
+  }
+
+  if (
+    data.providerStatus?.configured === false ||
+    /not configured|missing|your-agent-router-token/i.test(
+      data.providerError || ""
+    )
+  ) {
+    return "Local fallback · missing AgentRouter token";
+  }
+
+  return "Local fallback · AgentRouter error";
+}
+
 function SidebarLogo() {
   return (
     <img src="/assets/brand-logo.png" alt="SupportHub Logo" style={{ height: "46px", maxWidth: "100%", objectFit: "contain" }} />
@@ -465,6 +493,9 @@ function Workspace() {
   const [assistantSource, setAssistantSource] =
     useState("");
 
+  const [assistantProviderError, setAssistantProviderError] =
+    useState("");
+
   const [assistantLoading, setAssistantLoading] =
     useState(false);
 
@@ -536,6 +567,7 @@ function Workspace() {
       setAssistantError("");
       setAssistantAnswer("");
       setAssistantSource("");
+      setAssistantProviderError("");
 
       const response = await fetch(
         `${API}/api/assistant`,
@@ -563,15 +595,8 @@ function Workspace() {
       setAssistantAnswer(
         data.answer || "No answer received."
       );
-      setAssistantSource(
-        data.source === "agentrouter"
-          ? `AgentRouter · ${data.model || "configured model"}`
-          : data.source === "local-fallback"
-          ? data.providerError
-            ? "Local fallback · AgentRouter unavailable"
-            : "Local fallback"
-          : ""
-      );
+      setAssistantProviderError(data.providerError || "");
+      setAssistantSource(getAssistantSourceLabel(data));
     } catch (error) {
       console.error("AI Assistant error:", error);
 
@@ -1059,7 +1084,7 @@ function Workspace() {
           sending: false,
           error:
             data.source === "fallback" && data.providerError
-              ? `AgentRouter unavailable: ${data.providerError}`
+              ? `AgentRouter error: ${data.providerError}`
               : "",
           success: "",
         },
@@ -2972,7 +2997,17 @@ function Workspace() {
                       </div>
                       <div className="chat-bubble assistant-bubble">
                         {assistantSource && (
-                          <span className="assistant-source-tag">Source: {assistantSource}</span>
+                          <span
+                            className="assistant-source-tag"
+                            title={assistantProviderError || assistantSource}
+                          >
+                            Source: {assistantSource}
+                          </span>
+                        )}
+                        {assistantProviderError && (
+                          <p className="assistant-provider-error">
+                            {assistantProviderError}
+                          </p>
                         )}
                         <div className="assistant-answer">
                           {renderAssistantAnswer(assistantAnswer)}
@@ -2985,6 +3020,7 @@ function Workspace() {
                             setAssistantSentQuestion("");
                             setAssistantAnswer("");
                             setAssistantError("");
+                            setAssistantProviderError("");
                           }}
                         >
                           Reset Conversation

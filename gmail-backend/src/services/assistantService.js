@@ -4,6 +4,7 @@ import { listMemoryMessages } from "./memoryStore.js";
 import {
   askAgentRouter,
   getAgentRouterModel,
+  getAgentRouterStatus,
   isAgentRouterConfigured,
 } from "./agentRouterService.js";
 
@@ -198,6 +199,8 @@ Do not make up missing information.
       answer: buildLocalAnswer(messages, question),
       ticketCount: messages.length,
       source: "local-fallback",
+      providerError: "AGENT_ROUTER_TOKEN is not configured.",
+      providerStatus: getAgentRouterStatus(),
     };
   }
 
@@ -234,6 +237,7 @@ Do not make up missing information.
       ticketCount: messages.length,
       source: "local-fallback",
       providerError: error.message,
+      providerStatus: getAgentRouterStatus(),
     };
   }
 }
