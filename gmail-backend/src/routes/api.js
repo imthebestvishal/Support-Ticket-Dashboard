@@ -330,7 +330,108 @@ router.post("/messages/:id/send", requireAuth, async (req, res) => {
   }
 });
 
+
+// Generate AI reply draft
+router.post("/messages/:id/draft-reply", requireAuth, async (req, res) => {
+  try {
+    const message = await findUserMessage(
+      req.params.id,
+      req.user._id
+    );
+
+    if (!message) {
+      return res.status(404).send({
+        error: "Message not found",
+      });
+    }
+
+    const draft =
+      message.suggestedResponse ||
+      `Hello,
+
+Thank you for contacting support. We have received your request and our team will review it shortly.
+
+Regards,
+Support Team`;
+
+    message.suggestedResponse = draft;
+    await message.save();
+
+    res.send({
+      message,
+      draft,
+      source: "fallback",
+    });
+
+  } catch (error) {
+    console.error("Draft reply error:", error);
+
+    res.status(500).send({
+      error: "Failed to generate reply draft",
+    });
+  }
+});
+
+
+// Frontend send-reply compatibility route
+router.post("/messages/:id/send-reply", requireAuth, async (req, res) => {
+  try {
+    const reply =
+      req.body?.replyBody ||
+      req.body?.reply ||
+      req.body?.editedReply ||
+      "";
+
+    if (!reply.trim()) {
+      return res.status(400).send({
+        error: "Missing reply text",
+      });
+    }
+
+    const message = await findUserMessage(
+      req.params.id,
+      req.user._id
+    );
+
+    if (!message) {
+      return res.status(404).send({
+        error: "Message not found",
+      });
+    }
+
+    const sendResult = await sendGmailReply(
+      req.user._id,
+      message,
+      reply.trim()
+    );
+
+    message.sentAt = new Date();
+    message.editedReply = reply.trim();
+    message.suggestedResponse = reply.trim();
+    message.status = "Resolved";
+
+    await message.save();
+
+    res.send({
+      message,
+      sendResult,
+    });
+
+  } catch (error) {
+    console.error("Send reply error:", error);
+
+    res.status(500).send({
+      error: error.message || "Failed to send reply",
+    });
+  }
+});
+
+
+// Generate AI reply draft
 export { router as apiRouter };
+
+
+
 
 
 
