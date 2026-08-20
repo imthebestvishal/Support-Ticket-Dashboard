@@ -68,23 +68,6 @@ router.get("/gmail/status", requireAuth, async (req, res) => {
 });
 
 // Get stored analyzed messages/tickets
-
-// Get deleted messages / recycle bin
-router.get("/messages/trash", requireAuth, async (req, res) => {
-  try {
-    const messages = await Message.find({
-      userId: req.user._id,
-      status: "deleted",
-    });
-
-    res.json(messages);
-  } catch (error) {
-    console.error("Failed to get trash:", error);
-    res.status(500).json({
-      error: "Failed to get trash",
-    });
-  }
-});
 router.get("/messages", requireAuth, async (req, res) => {
   try {
     const messages = await Message.find({
