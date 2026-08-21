@@ -66,12 +66,9 @@ const projectHighlights = [
 
 function Logo() {
   return (
-    <Link to="/" className="landing-logo" aria-label="SupportHub home">
-      <img
-        src="/assets/brand_logo.png"
-        alt="SupportHub Logo"
-        style={{ height: "42px", maxWidth: "100%", objectFit: "contain" }}
-      />
+    <Link to="/" className="landing-logo senti-mail-logo" aria-label="sentiMail home">
+      <strong>senti</strong>
+      <span>Mail</span>
     </Link>
   );
 }

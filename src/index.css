@@ -3624,6 +3624,39 @@ select {
   margin-top: 5px;
 }
 
+.senti-mail-logo {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  text-decoration: none;
+}
+
+.senti-mail-logo strong {
+  color: #17191d;
+  font-size: 34px;
+  font-weight: 900;
+  line-height: 0.92;
+  letter-spacing: 0;
+}
+
+.senti-mail-logo span {
+  color: #599345;
+  font-size: 34px;
+  font-weight: 900;
+  line-height: 0.92;
+  letter-spacing: 0;
+  margin: 0;
+}
+
+.sidebar .senti-mail-logo strong {
+  color: #ffffff;
+}
+
+.sidebar .senti-mail-logo span {
+  color: #6bd14e;
+}
+
 .sidebar nav {
   display: flex;
   flex-direction: column;

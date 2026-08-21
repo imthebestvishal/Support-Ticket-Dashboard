@@ -567,7 +567,10 @@ function getAssistantSourceLabel(data: {
 
 function SidebarLogo() {
   return (
-    <img src="/assets/brand_logo.png" alt="SupportHub Logo" style={{ height: "46px", maxWidth: "100%", objectFit: "contain" }} />
+    <div className="brand-copy senti-mail-logo" aria-label="sentiMail">
+      <strong>senti</strong>
+      <span>Mail</span>
+    </div>
   );
 }
 
