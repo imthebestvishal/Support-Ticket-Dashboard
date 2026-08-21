@@ -9,6 +9,7 @@ import {
   sendGmailReply,
   refineSupportReply,
 } from "../services/gmailService.js";
+import { askAssistant } from "../services/assistantService.js";
 
 const router = express.Router();
 
@@ -499,7 +500,39 @@ router.post("/messages/:id/send-reply", requireAuth, async (req, res) => {
 
 
 // Generate AI reply draft
+
+router.post("/assistant", async (req, res) => {
+  try {
+    const { question } = req.body;
+
+    if (!question || !question.trim()) {
+      return res.status(400).send({
+        error: "Question is required",
+      });
+    }
+
+    const answer = await askAssistant(question);
+
+    res.send({
+      answer,
+      source: "gemini",
+    });
+
+  } catch (error) {
+    console.error("Assistant route error:", error);
+
+    res.status(500).send({
+      error: "AI Assistant failed",
+    });
+  }
+});
 export { router as apiRouter };
+
+
+
+
+
+
 
 
 
