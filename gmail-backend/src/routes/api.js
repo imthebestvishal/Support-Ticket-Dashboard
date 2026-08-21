@@ -337,6 +337,7 @@ router.post(
           message,
           error: verified.success ? undefined : verified.error,
           needsReconnect: Boolean(verified.needsReconnect),
+          needsApiEnable: Boolean(verified.needsApiEnable),
           provider: verified.provider || "google-calendar",
         });
       }
@@ -376,6 +377,7 @@ router.post(
         message,
         error: created.success ? undefined : created.error,
         needsReconnect: Boolean(created.needsReconnect),
+        needsApiEnable: Boolean(created.needsApiEnable),
         provider: created.provider || "google-calendar",
       });
     } catch (error) {

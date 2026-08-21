@@ -29,6 +29,10 @@ function googleErrorStatus(error) {
 }
 
 function isGoogleCalendarPermissionError(error) {
+  if (isGoogleCalendarApiDisabledError(error)) {
+    return false;
+  }
+
   const text = [
     error?.message,
     error?.response?.data?.error,
@@ -51,6 +55,43 @@ function isGoogleCalendarPermissionError(error) {
     text.includes("unauthorized") ||
     text.includes("insufficient authentication")
   );
+}
+
+function googleErrorText(error) {
+  return [
+    error?.message,
+    error?.response?.data?.error,
+    error?.response?.data?.error_description,
+    error?.response?.data?.message,
+    JSON.stringify(error?.errors || []),
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function isGoogleCalendarApiDisabledError(error) {
+  const text = googleErrorText(error).toLowerCase();
+
+  return (
+    text.includes("calendar api has not been used") ||
+    text.includes("api has not been used in project") ||
+    text.includes("it is disabled") ||
+    text.includes("service_disabled")
+  );
+}
+
+function calendarApiDisabledFailure(error, type = "Deadline") {
+  return {
+    success: false,
+    status: "Failed",
+    type,
+    error:
+      "Google Calendar API is disabled for this Google Cloud project. Enable the Calendar API, wait a few minutes, then try Add to Calendar again.",
+    needsReconnect: false,
+    needsApiEnable: true,
+    provider: "google-calendar",
+    statusCode: googleErrorStatus(error),
+  };
 }
 
 function calendarPermissionFailure(error, type = "Deadline") {
@@ -229,6 +270,10 @@ export async function createCalendarEvent({
   } catch (error) {
     console.error("Google Calendar event creation failed:", error.message);
 
+    if (isGoogleCalendarApiDisabledError(error)) {
+      return calendarApiDisabledFailure(error, eventType);
+    }
+
     if (isGoogleCalendarPermissionError(error)) {
       return calendarPermissionFailure(error, eventType);
     }
@@ -292,6 +337,10 @@ export async function verifyCalendarEvent({
       raw: event.data,
     };
   } catch (error) {
+    if (isGoogleCalendarApiDisabledError(error)) {
+      return calendarApiDisabledFailure(error, type);
+    }
+
     if (isGoogleCalendarPermissionError(error)) {
       return calendarPermissionFailure(error, type);
     }
@@ -341,6 +390,19 @@ export async function checkCalendarAccess({
       provider: "google-calendar",
     };
   } catch (error) {
+    if (isGoogleCalendarApiDisabledError(error)) {
+      return {
+        connected: true,
+        calendarPermission: false,
+        needsReconnect: false,
+        needsApiEnable: true,
+        provider: "google-calendar",
+        statusCode: googleErrorStatus(error),
+        error:
+          "Google Calendar API is disabled for this Google Cloud project. Enable the Calendar API, wait a few minutes, then try again.",
+      };
+    }
+
     if (isGoogleCalendarPermissionError(error)) {
       return {
         connected: true,

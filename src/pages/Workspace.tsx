@@ -104,6 +104,7 @@ type CalendarSyncState = {
   loading?: boolean;
   error?: string;
   success?: string;
+  needsApiEnable?: boolean;
 };
 
 type SessionUser = {
@@ -239,6 +240,14 @@ function ticketId(ticket: Ticket) {
 function openGoogleCalendar(url?: string | null) {
   window.open(
     url || "https://calendar.google.com/calendar/r",
+    "_blank",
+    "noopener,noreferrer"
+  );
+}
+
+function openGoogleCalendarApiEnable() {
+  window.open(
+    "https://console.developers.google.com/apis/api/calendar-json.googleapis.com/overview",
     "_blank",
     "noopener,noreferrer"
   );
@@ -1150,11 +1159,36 @@ function Workspace() {
       const data = JSON.parse(text);
 
       if (!response.ok || !data.success) {
-        throw new Error(
+        const errorMessage =
           data.error ||
             data.event?.calendarEventError ||
-            "Failed to add event to Google Calendar"
-        );
+            "Failed to add event to Google Calendar";
+
+        setCalendarSyncStates((previous) => ({
+          ...previous,
+          [stateKey]: {
+            loading: false,
+            error: errorMessage,
+            success: "",
+            needsApiEnable: Boolean(data.needsApiEnable),
+          },
+        }));
+
+        if (data.message) {
+          setTickets((previous) =>
+            previous.map((item) =>
+              ticketId(item) === id ? data.message : item
+            )
+          );
+
+          setGmailMessages((previous) =>
+            previous.map((item) =>
+              ticketId(item) === id ? data.message : item
+            )
+          );
+        }
+
+        return;
       }
 
       if (data.message) {
@@ -1179,6 +1213,7 @@ function Workspace() {
           success: data.verified
             ? "Verified in Google Calendar"
             : "Added to Google Calendar",
+          needsApiEnable: false,
         },
       }));
     } catch (error) {
@@ -1193,6 +1228,7 @@ function Workspace() {
           loading: false,
           error: message,
           success: "",
+          needsApiEnable: false,
         },
       }));
     }
@@ -3011,6 +3047,14 @@ function showAlerts() {
           >
             Reconnect Google Calendar
           </button>
+        ) : syncState.needsApiEnable ? (
+          <button
+            type="button"
+            className="text-button calendar-open-btn"
+            onClick={openGoogleCalendarApiEnable}
+          >
+            Enable Calendar API ↗
+          </button>
         ) : (
           <button
             type="button"
@@ -3092,6 +3136,14 @@ function showAlerts() {
                                       onClick={connectGmail}
                                     >
                                       Reconnect Calendar
+                                    </button>
+                                  ) : rowCalendarSyncState.needsApiEnable ? (
+                                    <button
+                                      type="button"
+                                      className="outline-button compact-action calendar-row-action"
+                                      onClick={openGoogleCalendarApiEnable}
+                                    >
+                                      Enable Calendar API
                                     </button>
                                   ) : (
                                     <button
