@@ -9,6 +9,7 @@ import session from "express-session";
 import { authRouter } from "./routes/auth.js";
 import { apiRouter } from "./routes/api.js";
 import { knowledgeRouter } from "./routes/knowledge.js";
+import { startGmailAutoSync } from "./services/gmailSyncService.js";
 
 
 const app = express();
@@ -94,4 +95,7 @@ app.get("/", (req, res) => {
 
 app.listen(port, () => {
   console.log(`Server listening on port ${port}`);
+  startGmailAutoSync();
 });
+
+

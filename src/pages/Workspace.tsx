@@ -61,6 +61,13 @@ type Ticket = {
   replyDraft?: string;
   sentReply?: string;
   replySentAt?: string | null;
+  escalationRisk?: string;
+  escalationRecommendation?: string;
+  isEscalated?: boolean;
+  escalatedAt?: string | null;
+  escalationReason?: string;
+  suggestedResponse?: string;
+  isTicket?: boolean;
 };
 
 type ReplyDraftState = {
@@ -505,6 +512,15 @@ function Workspace() {
   const [gmailError, setGmailError] =
     useState("");
 
+  const [autoSyncEnabled, setAutoSyncEnabled] =
+    useState(true);
+
+  const [lastSyncTime, setLastSyncTime] =
+    useState<Date | null>(null);
+
+  const [syncErrors, setSyncErrors] =
+    useState<{ message: string; at: Date }[]>([]);
+
   const [gmailProfileImage, setGmailProfileImage] =
     useState("");
 
@@ -594,6 +610,18 @@ function Workspace() {
       loadGmailMessages();
     }
   }, [gmailStatus]);
+
+  useEffect(() => {
+    if (!gmailStatus.startsWith("Connected") || !autoSyncEnabled) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      loadGmailMessages();
+    }, 45000);
+
+    return () => window.clearInterval(intervalId);
+  }, [gmailStatus, autoSyncEnabled]);
 
   async function askAssistant(overrideQuestion?: string) {
     const questionToSubmit = overrideQuestion !== undefined ? overrideQuestion : assistantQuestion;
@@ -800,17 +828,21 @@ function Workspace() {
       if (messages.length > 0) {
         setTickets(messages);
       }
+
+      setLastSyncTime(new Date());
     } catch (error) {
       console.error(
         "Failed to load Gmail messages:",
         error
       );
 
-      setGmailError(
+      const errorMessage =
         error instanceof Error
           ? error.message
-          : "Failed to load Gmail messages"
-      );
+          : "Failed to load Gmail messages";
+
+      setGmailError(errorMessage);
+      setSyncErrors((prev) => [{ message: errorMessage, at: new Date() }, ...prev].slice(0, 5));
     } finally {
       setGmailLoading(false);
     }
@@ -1549,6 +1581,99 @@ function Workspace() {
   const totalRate =
     percentOf(openCount, Math.max(tickets.length, 1));
 
+  function escalationRisk(ticket: Ticket): "High" | "Medium" | "Low" {
+    if (ticket.escalationRisk === "High" || ticket.escalationRisk === "Medium" || ticket.escalationRisk === "Low") {
+      return ticket.escalationRisk;
+    }
+    // Fallback heuristic only used if the backend hasn't analyzed this ticket yet
+    const isUrgentPriority = ticket.priority === "High" || ticket.priority === "Urgent";
+    const isNegative = ticket.sentiment === "Negative";
+    const isPastDeadline = ticket.deadlineStatus === "Overdue" || ticket.deadlineStatus === "Due Soon";
+    const score = [isUrgentPriority, isNegative, isPastDeadline].filter(Boolean).length;
+    if (score >= 2) return "High";
+    if (score === 1) return "Medium";
+    return "Low";
+  }
+
+  function ticketIntent(ticket: Ticket): string {
+    const text = `${ticket.subject || ""} ${ticket.summary || ""}`.toLowerCase();
+    if (text.includes("refund") || text.includes("charge") || text.includes("bill")) return "Billing dispute";
+    if (text.includes("cancel")) return "Cancellation";
+    if (text.includes("bug") || text.includes("error") || text.includes("not working") || text.includes("broken")) return "Bug report";
+    if (text.includes("password") || text.includes("login") || text.includes("access")) return "Account access";
+    if (text.includes("thank") || text.includes("great") || text.includes("love")) return "Positive feedback";
+    if (text.includes("?") || text.includes("how do") || text.includes("how to")) return "How-to question";
+    return "General inquiry";
+  }
+
+  const negativeSentimentCount = tickets.filter((t) => t.sentiment === "Negative").length;
+
+  const escalationRiskCounts = tickets.reduce(
+    (acc, t) => {
+      const risk = escalationRisk(t);
+      acc[risk] += 1;
+      return acc;
+    },
+    { High: 0, Medium: 0, Low: 0 } as Record<"High" | "Medium" | "Low", number>
+  );
+
+  const aiInsights = [
+    {
+      key: "sentiment",
+      label: "Negative sentiment",
+      value: negativeSentimentCount,
+      detail: negativeSentimentCount > 0
+        ? `${negativeSentimentCount} ticket${negativeSentimentCount === 1 ? "" : "s"} may need a careful tone`
+        : "Customer sentiment looks healthy",
+    },
+    {
+      key: "escalation",
+      label: "High escalation risk",
+      value: escalationRiskCounts.High,
+      detail: escalationRiskCounts.High > 0
+        ? "Review these before they slip"
+        : "Nothing at high risk right now",
+    },
+    {
+      key: "topCategory",
+      label: "Most common topic",
+      value: openCategories.reduce(
+        (top, cat) =>
+          tickets.filter((t) => t.category === cat).length >
+          tickets.filter((t) => t.category === top).length
+            ? cat
+            : top,
+        openCategories[0]
+      ),
+      detail: "Based on tickets received",
+    },
+  ];
+
+  const upcomingDeadlineTickets = tickets
+    .filter((t) => t.deadline && t.status !== "Resolved")
+    .sort((a, b) => new Date(a.deadline || 0).getTime() - new Date(b.deadline || 0).getTime())
+    .slice(0, 4);
+
+  const aiActionItems = tickets
+    .filter((t) => t.status !== "Resolved" && (t.replyDraft || escalationRisk(t) !== "Low"))
+    .slice(0, 4)
+    .map((t) => ({
+      ticket: t,
+      action: t.replyDraft
+        ? "Reply drafted — ready to review"
+        : escalationRisk(t) === "High"
+        ? "Suggested: escalate to a senior agent"
+        : "Suggested: send a status update",
+    }));
+
+  const pendingFollowUps = tickets
+    .filter((t) => t.status !== "Resolved" && !t.replySentAt)
+    .slice(0, 4);
+
+  const highPriorityNotifications = tickets
+    .filter((t) => t.status !== "Resolved" && (t.priority === "High" || t.priority === "Urgent"))
+    .slice(0, 4);
+
   const dashboardStats = [
     {
       key: "total",
@@ -1604,6 +1729,9 @@ function Workspace() {
   const pendingDeadlineNotifications = deadlineNotifications.filter(
     (ticket) => !completedDeadlines.includes(ticket._id || "")
   );
+
+  const totalNotificationCount =
+    pendingDeadlineNotifications.length + aiActionItems.length + pendingFollowUps.length + highPriorityNotifications.length;
 
   function completeDeadline(ticketId: string) {
     setCompletedDeadlines((prev) => [
@@ -1744,14 +1872,14 @@ function showAlerts() {
           <div className="top-actions">
 
             <button
-              className={`icon-button notification-button${pendingDeadlineNotifications.length > 0 ? " has-badge" : ""}`}
+              className={`icon-button notification-button${totalNotificationCount > 0 ? " has-badge" : ""}`}
               title="Notifications"
               aria-label="Notifications"
               type="button"
               onClick={showAlerts}
             >
               <NavIcon name="Notifications" />
-              {pendingDeadlineNotifications.length > 0 && <span className="notification-badge-dot" />}
+              {totalNotificationCount > 0 && <span className="notification-badge-dot" />}
             </button>
 
             <button
@@ -1810,7 +1938,7 @@ function showAlerts() {
             <div className="notification-center-popover">
               <div className="notification-center">
                 <div className="notification-center-header">
-                  <h2>Deadline Alerts</h2>
+                  <h2>Notifications</h2>
                   <button
                     type="button"
                     className="notification-close"
@@ -1820,26 +1948,76 @@ function showAlerts() {
                   </button>
                 </div>
 
-                {pendingDeadlineNotifications.length === 0 ? (
-                  <div className="notification-empty">
-                    <NavIcon name="Notifications" />
-                    <p>No deadline alerts right now.</p>
-                  </div>
-                ) : (
-                  pendingDeadlineNotifications.map((ticket) => (
-                    <div className="notification-item" key={ticket._id}>
-                      <strong>{ticket.subject || "Untitled ticket"}</strong>
-                      <p>{ticket.deadlineReason || ticket.deadlineStatus}</p>
-                      <button
-                        type="button"
-                        className="notification-close"
-                        onClick={() => ticket._id && completeDeadline(ticket._id)}
-                      >
-                        Mark done
-                      </button>
+                <div className="notification-section">
+                  <p className="notification-section-title">Deadline alerts</p>
+                  {pendingDeadlineNotifications.length === 0 ? (
+                    <div className="notification-empty compact">
+                      <p>No deadline alerts right now.</p>
                     </div>
-                  ))
-                )}
+                  ) : (
+                    pendingDeadlineNotifications.map((ticket) => (
+                      <div className="notification-item" key={`deadline-${ticket._id}`}>
+                        <strong>{ticket.subject || "Untitled ticket"}</strong>
+                        <p>{ticket.deadlineReason || ticket.deadlineStatus}</p>
+                        <button
+                          type="button"
+                          className="notification-close"
+                          onClick={() => ticket._id && completeDeadline(ticket._id)}
+                        >
+                          Mark done
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="notification-section">
+                  <p className="notification-section-title">High priority tickets</p>
+                  {highPriorityNotifications.length === 0 ? (
+                    <div className="notification-empty compact">
+                      <p>No high priority tickets.</p>
+                    </div>
+                  ) : (
+                    highPriorityNotifications.map((ticket) => (
+                      <div className="notification-item" key={`priority-${ticket._id}`}>
+                        <strong>{ticket.subject || "Untitled ticket"}</strong>
+                        <p>{ticket.priority} priority — {ticket.sender || "Unknown sender"}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="notification-section">
+                  <p className="notification-section-title">AI actions</p>
+                  {aiActionItems.length === 0 ? (
+                    <div className="notification-empty compact">
+                      <p>No AI actions pending.</p>
+                    </div>
+                  ) : (
+                    aiActionItems.map(({ ticket, action }) => (
+                      <div className="notification-item" key={`action-${ticket._id}`}>
+                        <strong>{ticket.subject || "Untitled ticket"}</strong>
+                        <p>{action}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="notification-section">
+                  <p className="notification-section-title">Pending follow-ups</p>
+                  {pendingFollowUps.length === 0 ? (
+                    <div className="notification-empty compact">
+                      <p>No pending follow-ups.</p>
+                    </div>
+                  ) : (
+                    pendingFollowUps.map((ticket) => (
+                      <div className="notification-item" key={`followup-${ticket._id}`}>
+                        <strong>{ticket.subject || "Untitled ticket"}</strong>
+                        <p>{ticket.sender || "Unknown sender"} is waiting on a reply</p>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -1889,14 +2067,14 @@ function showAlerts() {
                 <div className="dashboard-hero-actions">
                   <div className="dashboard-top-actions">
                     <button
-                      className={`icon-button notification-button${pendingDeadlineNotifications.length > 0 ? " has-badge" : ""}`}
+                      className={`icon-button notification-button${totalNotificationCount > 0 ? " has-badge" : ""}`}
                       title="Notifications"
                       aria-label="Notifications"
                       type="button"
                       onClick={showAlerts}
                     >
                       <NavIcon name="Notifications" />
-                      {pendingDeadlineNotifications.length > 0 && <span className="notification-badge-dot" />}
+                      {totalNotificationCount > 0 && <span className="notification-badge-dot" />}
                     </button>
 
                     <button
@@ -2062,6 +2240,49 @@ function showAlerts() {
                     </button>
                   </article>
 
+                  <article className="dashboard-card dashboard-side-card dashboard-autosync-card">
+                    <div className="dashboard-side-heading">
+                      <div className="gmail-logo">
+                        <NavIcon name="Gmail Analyzer" />
+                      </div>
+                      <div>
+                        <h2>Gmail Auto Sync</h2>
+                        <p>{gmailStatus.startsWith("Connected") ? gmailStatus.replace("Connected: ", "") : "Not connected"}</p>
+                      </div>
+                    </div>
+
+                    <div className="autosync-status-list">
+                      <div className="autosync-status-row">
+                        <span>Sync</span>
+                        <strong className={autoSyncEnabled ? "text-success" : "text-muted"}>
+                          {autoSyncEnabled ? "ON" : "OFF"}
+                        </strong>
+                      </div>
+                      <div className="autosync-status-row">
+                        <span>Last sync</span>
+                        <strong>{lastSyncTime ? lastSyncTime.toLocaleTimeString() : "Never"}</strong>
+                      </div>
+                      <div className="autosync-status-row">
+                        <span>Processed emails</span>
+                        <strong>{gmailMessages.length}</strong>
+                      </div>
+                      <div className="autosync-status-row">
+                        <span>Errors</span>
+                        <strong className={syncErrors.length > 0 ? "text-danger" : "text-success"}>
+                          {syncErrors.length}
+                        </strong>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="outline-button full"
+                      onClick={() => setAutoSyncEnabled((prev) => !prev)}
+                    >
+                      {autoSyncEnabled ? "Turn Off Auto Sync" : "Turn On Auto Sync"}
+                    </button>
+                  </article>
+
                   <article className="dashboard-card dashboard-side-card dashboard-ai-card">
                     <div className="dashboard-side-heading">
                       <div className="ai-symbol">AI</div>
@@ -2080,6 +2301,90 @@ function showAlerts() {
                     >
                       <span aria-hidden="true">✣</span> AI Support
                     </button>
+                  </article>
+
+                  <article className="dashboard-card dashboard-side-card dashboard-insights-card">
+                    <div className="dashboard-side-heading">
+                      <div className="ai-symbol">AI</div>
+                      <div>
+                        <h2>AI Insights</h2>
+                        <p>Patterns AI has spotted across your tickets.</p>
+                      </div>
+                    </div>
+
+                    <div className="ai-insight-list">
+                      {aiInsights.map((insight) => (
+                        <div className="ai-insight-row" key={insight.key}>
+                          <span className="ai-insight-label">{insight.label}</span>
+                          <strong className="ai-insight-value">{insight.value}</strong>
+                          <span className="ai-insight-detail">{insight.detail}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </article>
+
+                  <article className="dashboard-card dashboard-side-card dashboard-deadline-card">
+                    <div className="dashboard-side-heading">
+                      <div className="ai-symbol ai-symbol-warning">⏰</div>
+                      <div>
+                        <h2>Deadline Monitor</h2>
+                        <p>Tickets closest to their response deadline.</p>
+                      </div>
+                    </div>
+
+                    {upcomingDeadlineTickets.length === 0 ? (
+                      <div className="empty-state compact">
+                        <p>No upcoming deadlines.</p>
+                      </div>
+                    ) : (
+                      <div className="deadline-monitor-list">
+                        {upcomingDeadlineTickets.map((ticket) => (
+                          <div className="deadline-monitor-row" key={ticketId(ticket)}>
+                            <div>
+                              <strong>{ticket.subject || "Untitled ticket"}</strong>
+                              <span>{ticket.deadlineStatus || "Deadline set"}</span>
+                            </div>
+                            <span className={priorityClass(ticket.priority)}>
+                              {ticket.priority || "Medium"}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </article>
+
+                  <article className="dashboard-card dashboard-side-card dashboard-actions-card">
+                    <div className="dashboard-side-heading">
+                      <div className="ai-symbol">AI</div>
+                      <div>
+                        <h2>AI Actions</h2>
+                        <p>Suggested next steps from the assistant.</p>
+                      </div>
+                    </div>
+
+                    {aiActionItems.length === 0 ? (
+                      <div className="empty-state compact">
+                        <p>No AI actions pending.</p>
+                      </div>
+                    ) : (
+                      <div className="ai-action-list">
+                        {aiActionItems.map(({ ticket, action }) => (
+                          <div className="ai-action-row" key={ticketId(ticket)}>
+                            <div>
+                              <strong>{ticket.subject || "Untitled ticket"}</strong>
+                              <span>{action}</span>
+                            </div>
+                            <button
+                              type="button"
+                              className="text-button"
+                              onClick={() => setActive("Tickets")}
+                            >
+                              Review →
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </article>
                 </section>
               </div>
@@ -2187,8 +2492,48 @@ function showAlerts() {
 <div className="ai-insights-panel">
   <strong>AI Insights</strong>
   <div>Category: {ticket.category || "Other"}</div>
+  <div>Intent: {ticketIntent(ticket)}</div>
   <div>Priority: {ticket.priority || "Medium"}</div>
   <div>Sentiment: {ticket.sentiment || "Neutral"}</div>
+  <div>
+    Escalation risk:{" "}
+    <span className={`escalation-risk risk-${escalationRisk(ticket).toLowerCase()}`}>
+      {escalationRisk(ticket)}
+    </span>
+  </div>
+  {ticket.escalationRecommendation && (
+    <div>Recommendation: {ticket.escalationRecommendation}</div>
+  )}
+  {ticket.deadline && (
+    <>
+      <div>Deadline: {new Date(ticket.deadline).toLocaleString()}</div>
+      {ticket.deadlineReason && <div>Deadline reason: {ticket.deadlineReason}</div>}
+      <div>Deadline status: {ticket.deadlineStatus || "Upcoming"}</div>
+      <div className="calendar-status-row">
+        <span className="green-dot" />
+        Calendar event scheduled
+      </div>
+    </>
+  )}
+  {ticket.suggestedResponse && (
+    <div className="ai-suggested-reply-preview">
+      <span className="ai-insight-label">AI suggested reply</span>
+      <p>{ticket.suggestedResponse}</p>
+    </div>
+  )}
+  <button
+    type="button"
+    className="text-button ai-suggest-reply-btn"
+    onClick={() => draftTicketReply(ticket)}
+    disabled={!canReply || replyState?.loading || replyState?.sending}
+    title={
+      canReply
+        ? "Generate an AI-suggested reply"
+        : "Replies require a Gmail-backed ticket with a valid sender email"
+    }
+  >
+    {replyState?.loading ? "Generating..." : "✣ AI Suggested Reply"}
+  </button>
 </div>
 
                                 {ticket.replySentAt && (
@@ -2454,27 +2799,130 @@ function showAlerts() {
 
               </div>
 
-              <div className="feature-status">
+              <div className="gmail-integration-card">
 
-                <span
-                  className={
-                    gmailStatus.startsWith(
-                      "Connected"
-                    )
-                      ? "green-dot"
-                      : "orange-dot"
-                  }
-                ></span>
+                <div className="gmail-integration-row">
+                  <div className="gmail-integration-item">
+                    <span className="gmail-integration-label">Gmail connection</span>
+                    <span className="gmail-integration-value">
+                      <span
+                        className={
+                          gmailStatus.startsWith("Connected") ? "green-dot" : "orange-dot"
+                        }
+                      ></span>
+                      {gmailStatus}
+                    </span>
+                  </div>
 
-                Backend:
-                {" "}
-                {backendStatus}
-                {" · "}
-                Gmail:
-                {" "}
-                {gmailStatus}
+                  <div className="gmail-integration-item">
+                    <span className="gmail-integration-label">Backend</span>
+                    <span className="gmail-integration-value">
+                      <span
+                        className={
+                          backendStatus.startsWith("Connected") || backendStatus === "OK"
+                            ? "green-dot"
+                            : "orange-dot"
+                        }
+                      ></span>
+                      {backendStatus}
+                    </span>
+                  </div>
+
+                  <div className="gmail-integration-item">
+                    <span className="gmail-integration-label">Ticket creation</span>
+                    <span className="gmail-integration-value">
+                      <span className={gmailMessages.length > 0 ? "green-dot" : "orange-dot"}></span>
+                      {gmailMessages.length > 0
+                        ? `${gmailMessages.length} ticket${gmailMessages.length === 1 ? "" : "s"} created from Gmail`
+                        : "No tickets created yet"}
+                    </span>
+                  </div>
+
+                  <div className="gmail-integration-item">
+                    <span className="gmail-integration-label">Auto sync</span>
+                    <span className="gmail-integration-value">
+                      <span className={autoSyncEnabled ? "green-dot" : "orange-dot"}></span>
+                      {autoSyncEnabled ? "ON — every 45s" : "OFF"}
+                    </span>
+                  </div>
+
+                  <div className="gmail-integration-item">
+                    <span className="gmail-integration-label">Last sync</span>
+                    <span className="gmail-integration-value">
+                      {lastSyncTime ? lastSyncTime.toLocaleTimeString() : "Not synced yet"}
+                    </span>
+                  </div>
+
+                  <div className="gmail-integration-item">
+                    <span className="gmail-integration-label">Sync errors</span>
+                    <span className="gmail-integration-value">
+                      <span className={syncErrors.length > 0 ? "orange-dot" : "green-dot"}></span>
+                      {syncErrors.length > 0 ? `${syncErrors.length} recent error${syncErrors.length === 1 ? "" : "s"}` : "None"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="gmail-integration-actions">
+                  <button
+                    className="outline-button"
+                    onClick={loadGmailMessages}
+                    disabled={gmailLoading}
+                  >
+                    {gmailLoading ? "Syncing..." : "Sync Emails"}
+                  </button>
+
+                  <button
+                    className="primary-button"
+                    onClick={
+                      gmailStatus.startsWith("Connected") ? analyzeGmail : connectGmail
+                    }
+                    disabled={gmailLoading}
+                  >
+                    {gmailLoading
+                      ? "Analyzing..."
+                      : gmailStatus.startsWith("Connected")
+                      ? "Analyze Emails"
+                      : "Connect Gmail"}
+                  </button>
+
+                  <button
+                    className="outline-button"
+                    onClick={() => setAutoSyncEnabled((prev) => !prev)}
+                  >
+                    {autoSyncEnabled ? "Turn Auto Sync Off" : "Turn Auto Sync On"}
+                  </button>
+                </div>
+
+                {syncErrors.length > 0 && (
+                  <div className="sync-error-log">
+                    {syncErrors.map((err, i) => (
+                      <div key={i} className="sync-error-row">
+                        <span>{err.at.toLocaleTimeString()}</span>
+                        <span>{err.message}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
               </div>
+
+              {gmailStatus === "Not connected" && (
+                <div className="alert alert-warning">
+                  <strong>Gmail disconnected.</strong> Connect your Gmail account to enable auto sync and AI ticket analysis.
+                </div>
+              )}
+
+              {gmailStatus === "Unavailable" && (
+                <div className="alert">
+                  <strong>Gmail unavailable.</strong> The backend couldn't reach Gmail. Check your connection and try again.
+                </div>
+              )}
+
+              {gmailError && gmailError.toLowerCase().includes("gemini") && (
+                <div className="alert">
+                  <strong>AI analysis unavailable.</strong> Gemini is not responding — emails will sync but won't be analyzed until it's back.
+                </div>
+              )}
 
               {gmailError && (
                 <div className="alert">

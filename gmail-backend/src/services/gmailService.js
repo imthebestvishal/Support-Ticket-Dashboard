@@ -1,6 +1,8 @@
 import { google } from "googleapis";
 import { User } from "../models/user.js";
 import { Message } from "../models/message.js";
+import { extractDeadline } from "./ticketIntelligenceService.js";
+import { createCalendarDeadline } from "./calendarService.js";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
@@ -246,8 +248,8 @@ export async function fetchAndAnalyzeMessages(userId) {
   const listResponse =
     await gmail.users.messages.list({
       userId: "me",
-      q: "is:unread",
-      maxResults: 20,
+      q: "is:unread newer_than:1d",
+      maxResults: 3,
     });
 
   const gmailMessages =
@@ -299,6 +301,40 @@ export async function fetchAndAnalyzeMessages(userId) {
       console.log(
         `AI result: ${JSON.stringify(analysis)}`
       );
+
+      const deadlineAI = await extractDeadline(
+        `${subject || ""} ${body || ""}`
+      );
+
+      console.log(
+        "AI Deadline Result:",
+        deadlineAI
+      );
+
+      if (deadlineAI.deadline) {
+
+        await createCalendarDeadline({
+
+          accessToken:
+            user.accessToken,
+
+          refreshToken:
+            user.refreshToken,
+
+          subject,
+
+          deadline:
+            deadlineAI.deadline,
+
+          reason:
+            deadlineAI.deadlineReason,
+
+        });
+
+        console.log(
+          "Google Calendar deadline created"
+        );
+      }
 
       const savedMessage =
         await Message.findOneAndUpdate(
@@ -579,3 +615,9 @@ Return ONLY the rewritten response text. Do not wrap in markdown quotes or code 
 
   return text.trim();
 }
+
+
+
+
+
+

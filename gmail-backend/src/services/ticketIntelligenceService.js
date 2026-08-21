@@ -1,3 +1,5 @@
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
 const ALLOWED_CATEGORIES = [
   "Technical",
   "Billing",
@@ -112,47 +114,100 @@ export function analyzeTicket(message = "") {
 
 
 
-export function extractDeadline(message = "") {
+export async function extractDeadline(message = "") {
 
-  const text = message.toLowerCase();
+  try {
 
-  let deadline = null;
-  let deadlineReason = "";
-
-  if (
-    text.includes("today") ||
-    text.includes("urgent") ||
-    text.includes("asap")
-  ) {
-    deadline = new Date(
-      Date.now() + 24 * 60 * 60 * 1000
+    const genAI = new GoogleGenerativeAI(
+      process.env.GEMINI_API_KEY
     );
 
-    deadlineReason =
-      "Customer requested urgent resolution";
-  }
+    const model = genAI.getGenerativeModel({
+      model: "gemini-3.6-flash",
+    });
 
-  if (text.includes("tomorrow")) {
 
-    deadline = new Date(
-      Date.now() + 48 * 60 * 60 * 1000
-    );
+    const result = await model.generateContent(`
+You are a support ticket deadline detector.
 
-    deadlineReason =
-      "Customer requested completion tomorrow";
-  }
+Analyze this customer email:
 
-  return {
-    deadline,
-    deadlineReason,
-    deadlineStatus:
-      deadline ? "Upcoming" : "None"
-  };
+${message}
+
+Return ONLY valid JSON.
+
+Format:
+
+{
+ "hasDeadline": true or false,
+ "deadline": "ISO date string or null",
+ "reason": "why this deadline exists"
 }
+
+Rules:
+- Detect dates mentioned by customer.
+- Detect phrases like:
+  "before Friday"
+  "by tomorrow"
+  "within 2 days"
+  "ASAP"
+  "urgent"
+- If no deadline exists return:
+{
+ "hasDeadline": false,
+ "deadline": null,
+ "reason": ""
+}
+`);
+
+    const text = result.response.text();
+
+    const clean = text
+      .replace(/```json/g, "")
+      .replace(/```/g, "")
+      .trim();
+
+
+    const ai = JSON.parse(clean);
+
+
+    return {
+      deadline: ai.deadline
+        ? new Date(ai.deadline)
+        : null,
+
+      deadlineReason:
+        ai.reason || "",
+
+      deadlineStatus:
+        ai.deadline
+          ? "Upcoming"
+          : "None"
+    };
+
+
+  } catch(error) {
+
+    console.error(
+      "Deadline AI error:",
+      error
+    );
+
+    return {
+      deadline:null,
+      deadlineReason:"",
+      deadlineStatus:"None"
+    };
+
+  }
+}
+
 export {
   ALLOWED_CATEGORIES,
   ALLOWED_PRIORITIES,
   ALLOWED_SENTIMENTS
 };
+
+
 
 

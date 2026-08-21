@@ -157,7 +157,7 @@ router.post("/messages/fetch", requireAuth, async (req, res) => {
       message.escalationRisk = ai.escalationRisk;
       message.escalationRecommendation = ai.escalationRecommendation;
 
-      const deadlineAI = extractDeadline(
+      const deadlineAI = await extractDeadline(
         `${message.subject || ""} ${message.body || ""}`
       );
 
@@ -526,7 +526,71 @@ router.post("/assistant", async (req, res) => {
     });
   }
 });
+
+router.post("/assistant/create-deadline", requireAuth, async (req,res)=>{
+  try {
+
+    const {
+      subject,
+      message
+    } = req.body;
+
+
+    const deadlineAI = await extractDeadline(
+      message || ""
+    );
+
+
+    if(!deadlineAI.deadline){
+      return res.status(400).send({
+        error:"No deadline detected"
+      });
+    }
+
+
+    const event = await createCalendarDeadline({
+
+      accessToken:req.user.accessToken,
+
+      refreshToken:req.user.refreshToken,
+
+      subject:
+        subject || "AI Support Deadline",
+
+      deadline:
+        deadlineAI.deadline,
+
+      reason:
+        deadlineAI.deadlineReason
+
+    });
+
+
+    res.send({
+      success:true,
+      event
+    });
+
+
+  } catch(error){
+
+    console.error(
+      "Calendar AI error:",
+      error
+    );
+
+    res.status(500).send({
+      error:"Failed creating calendar event"
+    });
+
+  }
+});
+
 export { router as apiRouter };
+
+
+
+
 
 
 
