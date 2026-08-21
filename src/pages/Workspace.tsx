@@ -155,6 +155,70 @@ function priorityClass(priority?: string) {
   return "badge badge-green";
 }
 
+function hasImportantPriority(ticket: Ticket) {
+  const priority = (ticket.priority || "").toLowerCase();
+
+  return priority === "high" || priority === "urgent";
+}
+
+function hasMeaningfulStatus(ticket: Ticket) {
+  const status = (ticket.status || "Open").toLowerCase();
+
+  return Boolean(status) && status !== "open";
+}
+
+function hasCalendarSignal(ticket: Ticket) {
+  return Boolean(
+    ticket.deadline ||
+      ticket.calendarEventId ||
+      ticket.calendarEventStatus === "Scheduled" ||
+      ticket.calendarEventStatus === "Failed" ||
+      (ticket.calendarEvents && ticket.calendarEvents.length > 0)
+  );
+}
+
+function RelevantChips({ ticket }: { ticket: Ticket }) {
+  const showPriority = hasImportantPriority(ticket);
+  const showStatus = hasMeaningfulStatus(ticket);
+  const showCalendar = hasCalendarSignal(ticket);
+  const typeLabel =
+    ticket.calendarEventType && ticket.calendarEventType !== "None"
+      ? ticket.calendarEventType
+      : "";
+  const showType = Boolean(
+    typeLabel ||
+      (ticket.category && (showPriority || showStatus || showCalendar))
+  );
+
+  return (
+    <>
+      {showType && (
+        <span className="badge badge-gray">
+          {typeLabel || ticket.category}
+        </span>
+      )}
+
+      {showPriority && (
+        <span className={priorityClass(ticket.priority)}>
+          {ticket.priority}
+        </span>
+      )}
+
+      {showCalendar && (
+        <span className="badge badge-green">
+          Calendar
+        </span>
+      )}
+
+      {showStatus && (
+        <span className="badge badge-gray">
+          {ticket.status}
+        </span>
+      )}
+    </>
+  );
+}
+
 function ticketId(ticket: Ticket) {
   return ticket._id || ticket.gmailMessageId || "";
 }
@@ -2290,12 +2354,7 @@ function showAlerts() {
                         </div>
 
                         <div className="dashboard-ticket-badges">
-                          <span className={priorityClass(ticket.priority)}>
-                            {ticket.priority || "Medium"}
-                          </span>
-                          <span className="badge badge-green">
-                            {ticket.status || "Open"}
-                          </span>
+                          <RelevantChips ticket={ticket} />
                         </div>
                       </article>
                     ))}
@@ -2792,25 +2851,7 @@ function showAlerts() {
                               </div>
 
                               <div className="badges">
-
-                                <span className="badge badge-gray">
-                                  {ticket.category ||
-                                    "Other"}
-                                </span>
-
-                                <span
-                                  className={priorityClass(
-                                    ticket.priority
-                                  )}
-                                >
-                                  {ticket.priority ||
-                                    "Medium"}
-                                </span>
-
-                                <span className="badge badge-gray">
-                                  {ticket.status ||
-                                    "Open"}
-                                </span>
+                                <RelevantChips ticket={ticket} />
 
                                 <button
                                   className="outline-button compact-action"
@@ -3488,30 +3529,7 @@ function showAlerts() {
                                 "180px",
                             }}
                           >
-
-                            <span className="badge badge-gray">
-                              {mail.category ||
-                                "Other"}
-                            </span>
-
-                            <span
-                              className={priorityClass(
-                                mail.priority
-                              )}
-                            >
-                              {mail.priority ||
-                                "Medium"}
-                            </span>
-
-                            <span className="badge badge-gray">
-                              {mail.sentiment ||
-                                "Neutral"}
-                            </span>
-
-                            <span className="badge badge-gray">
-                              {mail.status ||
-                                "Open"}
-                            </span>
+                            <RelevantChips ticket={mail} />
 
                             <button
                               className="delete-button"
@@ -3691,20 +3709,7 @@ function showAlerts() {
                                 "230px",
                             }}
                           >
-
-                            <span className="badge badge-gray">
-                              {mail.category ||
-                                "Other"}
-                            </span>
-
-                            <span
-                              className={priorityClass(
-                                mail.priority
-                              )}
-                            >
-                              {mail.priority ||
-                                "Medium"}
-                            </span>
+                            <RelevantChips ticket={mail} />
 
                             <button
                               className="outline-button"
