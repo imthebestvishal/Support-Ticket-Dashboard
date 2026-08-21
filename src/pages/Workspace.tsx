@@ -271,6 +271,22 @@ function calendarActionEvents(ticket: Ticket): CalendarEventRecord[] {
   return [];
 }
 
+function looksLikeCalendarEmail(ticket: Ticket) {
+  const text = [
+    ticket.subject,
+    ticket.summary,
+    ticket.body,
+    ticket.category,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return /(deadline|due|closing|closes|expires|event|invitation|webinar|meeting|session|appointment|interview|challenge|conference|workshop|calendar)/i.test(
+    text
+  );
+}
+
 function hasUsableSender(sender?: string) {
   return /[^\s@]+@[^\s@]+\.[^\s@]+/.test(sender || "");
 }
@@ -2840,6 +2856,9 @@ function showAlerts() {
                           Boolean(ticket.gmailMessageId) &&
                           hasUsableSender(ticket.sender);
                         const rowCalendarEvents = calendarActionEvents(ticket);
+                        const calendarEmailWithoutDate =
+                          rowCalendarEvents.length === 0 &&
+                          looksLikeCalendarEmail(ticket);
                         const rowCalendarEvent = rowCalendarEvents[0];
                         const rowCalendarStateKey = rowCalendarEvent
                           ? `${id}:0`
@@ -2964,6 +2983,19 @@ function showAlerts() {
       </div>
     );
   })}
+  {calendarEmailWithoutDate && (
+    <div className="ticket-calendar-action is-muted">
+      <div>
+        <span className="ai-insight-label">Calendar</span>
+        <div className="ticket-calendar-title">
+          Event-like email detected
+        </div>
+        <div className="ai-insight-detail">
+          No usable date or time was found, so this cannot be added to Google Calendar yet.
+        </div>
+      </div>
+    </div>
+  )}
   {ticket.suggestedResponse && (
     <div className="ai-suggested-reply-preview">
       <span className="ai-insight-label">AI suggested reply</span>

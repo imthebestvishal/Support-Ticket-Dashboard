@@ -7089,6 +7089,11 @@ body.dark-theme .tab-hero-heading h2 {
   white-space: nowrap;
 }
 
+.ticket-calendar-action.is-muted {
+  background: #f8faf7;
+  color: var(--sh-muted, #66736a);
+}
+
 .calendar-row-action {
   border-color: #b7d8ad;
   color: var(--sh-accent-strong, #347928);

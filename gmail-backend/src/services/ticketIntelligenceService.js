@@ -126,6 +126,175 @@ const ALLOWED_CALENDAR_EVENT_TYPES = [
   "Callback",
 ];
 
+const MONTH_NAMES =
+  "january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec";
+
+function inferCalendarEventType(text = "") {
+  const lower = text.toLowerCase();
+
+  if (/(deadline|due|closing|closes|expires|last date|submit by)/i.test(lower)) {
+    return "Deadline";
+  }
+
+  if (/(meeting|webinar|session|conference|interview|call)/i.test(lower)) {
+    return "Meeting";
+  }
+
+  if (/(appointment|visit)/i.test(lower)) {
+    return "Appointment";
+  }
+
+  if (/(follow up|follow-up)/i.test(lower)) {
+    return "Follow-up";
+  }
+
+  if (/(call back|callback)/i.test(lower)) {
+    return "Callback";
+  }
+
+  return "Reminder";
+}
+
+function calendarTitleFromText(text = "") {
+  const firstLine = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find(Boolean);
+
+  return (firstLine || "Detected calendar event").slice(0, 120);
+}
+
+function normalizeDetectedDate(date) {
+  if (!date || Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date;
+}
+
+function localCalendarEventFallback(message = "") {
+  const text = String(message || "");
+
+  if (!/(deadline|due|closing|closes|expires|last date|event|invitation|webinar|meeting|session|appointment|interview|challenge|conference|workshop|call)/i.test(text)) {
+    return [];
+  }
+
+  const candidates = [];
+
+  const relativePattern =
+    /(?:deadline|due|closing|closes|expires|ends?|last date|submit|submission)?[^.\n]{0,80}?\bin\s+(\d{1,3})\s*(hour|hours|day|days)\b/i;
+  const relativeMatch = text.match(relativePattern);
+
+  if (relativeMatch) {
+    const amount = Number(relativeMatch[1]);
+    const unit = relativeMatch[2].toLowerCase();
+    const ms =
+      amount *
+      (unit.startsWith("hour")
+        ? 60 * 60 * 1000
+        : 24 * 60 * 60 * 1000);
+
+    candidates.push({
+      dateTime: new Date(Date.now() + ms),
+      reason: relativeMatch[0].trim(),
+    });
+  }
+
+  const tomorrowMatch = text.match(/\btomorrow\b(?:[^.\n]{0,40}?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?)?/i);
+
+  if (tomorrowMatch) {
+    const date = new Date();
+    date.setDate(date.getDate() + 1);
+    date.setHours(9, 0, 0, 0);
+
+    if (tomorrowMatch[1]) {
+      let hour = Number(tomorrowMatch[1]);
+      const minute = Number(tomorrowMatch[2] || 0);
+      const meridiem = (tomorrowMatch[3] || "").toLowerCase();
+
+      if (meridiem === "pm" && hour < 12) hour += 12;
+      if (meridiem === "am" && hour === 12) hour = 0;
+
+      date.setHours(hour, minute, 0, 0);
+    }
+
+    candidates.push({
+      dateTime: date,
+      reason: tomorrowMatch[0].trim(),
+    });
+  }
+
+  const monthDatePattern = new RegExp(
+    `\\b(?:on|by|before|until|till|date:?|deadline:?|closing:?|closes:?)?\\s*((?:\\d{1,2}(?:st|nd|rd|th)?\\s+(?:${MONTH_NAMES})|(?:${MONTH_NAMES})\\s+\\d{1,2}(?:st|nd|rd|th)?)(?:[,\\s]+\\d{4})?)(?:[^.\\n]{0,30}?(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm))?`,
+    "i"
+  );
+  const monthDateMatch = text.match(monthDatePattern);
+
+  if (monthDateMatch) {
+    const dateText = monthDateMatch[1].replace(/(\d)(st|nd|rd|th)/gi, "$1");
+    const hasYear = /\b\d{4}\b/.test(dateText);
+    const parsed = new Date(hasYear ? dateText : `${dateText} ${new Date().getFullYear()}`);
+
+    if (!Number.isNaN(parsed.getTime())) {
+      let hour = monthDateMatch[2] ? Number(monthDateMatch[2]) : 9;
+      const minute = Number(monthDateMatch[3] || 0);
+      const meridiem = (monthDateMatch[4] || "").toLowerCase();
+
+      if (meridiem === "pm" && hour < 12) hour += 12;
+      if (meridiem === "am" && hour === 12) hour = 0;
+
+      parsed.setHours(hour, minute, 0, 0);
+
+      candidates.push({
+        dateTime: parsed,
+        reason: monthDateMatch[0].trim(),
+      });
+    }
+  }
+
+  const numericDateMatch = text.match(
+    /\b(?:on|by|before|until|till|date:?|deadline:?|closing:?)?\s*(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})(?:[^.\n]{0,30}?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?)?/i
+  );
+
+  if (numericDateMatch) {
+    const day = Number(numericDateMatch[1]);
+    const month = Number(numericDateMatch[2]) - 1;
+    const yearValue = Number(numericDateMatch[3]);
+    const year = yearValue < 100 ? 2000 + yearValue : yearValue;
+    let hour = numericDateMatch[4] ? Number(numericDateMatch[4]) : 9;
+    const minute = Number(numericDateMatch[5] || 0);
+    const meridiem = (numericDateMatch[6] || "").toLowerCase();
+
+    if (meridiem === "pm" && hour < 12) hour += 12;
+    if (meridiem === "am" && hour === 12) hour = 0;
+
+    candidates.push({
+      dateTime: new Date(year, month, day, hour, minute, 0, 0),
+      reason: numericDateMatch[0].trim(),
+    });
+  }
+
+  const firstUsable = candidates
+    .map((candidate) => ({
+      ...candidate,
+      dateTime: normalizeDetectedDate(candidate.dateTime),
+    }))
+    .find((candidate) => candidate.dateTime);
+
+  if (!firstUsable) {
+    return [];
+  }
+
+  return [
+    {
+      type: inferCalendarEventType(text),
+      title: calendarTitleFromText(text),
+      dateTime: firstUsable.dateTime,
+      reason: firstUsable.reason || "Detected by local calendar fallback",
+    },
+  ];
+}
+
 /*
  * Analyzes a ticket's text for EVERY calendar-relevant event the AI can
  * find, not only deadlines: meetings, appointments, follow-ups, reminders,
@@ -217,11 +386,13 @@ Rules:
       })
       .filter(Boolean);
 
-    return { events };
+    return {
+      events: events.length > 0 ? events : localCalendarEventFallback(message),
+    };
   } catch (error) {
     console.error("Calendar event AI error:", error);
 
-    return { events: [] };
+    return { events: localCalendarEventFallback(message) };
   }
 }
 
