@@ -567,9 +567,8 @@ function getAssistantSourceLabel(data: {
 
 function SidebarLogo() {
   return (
-    <div className="brand-copy senti-mail-logo" aria-label="SentiMail">
-      <strong>Senti</strong>
-      <span>Mail</span>
+    <div className="brand-copy dashboard-brand-logo" aria-label="SentiMail">
+      <img src="/assets/Brandlogo_dashboard.png" alt="SentiMail" />
     </div>
   );
 }
