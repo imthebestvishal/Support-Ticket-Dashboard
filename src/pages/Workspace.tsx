@@ -3,20 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { authClient } from "../lib/auth";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:5000";
-async function requestNotificationPermission() {
-
-  if (!("Notification" in window)) {
-    return;
-  }
-
-
-  if (Notification.permission === "default") {
-
-    await Notification.requestPermission();
-
-  }
-
-}
+const DEADLINE_NOTIFICATION_KEY = "supporthubDeadlineNotifications";
+const DEADLINE_NOTIFICATION_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
 
 function sendSystemDeadlineNotification(ticket: Ticket) {
@@ -36,6 +24,46 @@ function sendSystemDeadlineNotification(ticket: Ticket) {
 
   }
 
+}
+
+function sendDeadlineNotificationOnce(ticket: Ticket) {
+  if (
+    !("Notification" in window) ||
+    Notification.permission !== "granted"
+  ) {
+    return;
+  }
+
+  const id = ticketId(ticket);
+
+  if (!id) {
+    return;
+  }
+
+  const now = Date.now();
+  let sentAtByTicket: Record<string, number> = {};
+
+  try {
+    sentAtByTicket = JSON.parse(
+      localStorage.getItem(DEADLINE_NOTIFICATION_KEY) || "{}"
+    );
+  } catch {
+    sentAtByTicket = {};
+  }
+
+  const lastSentAt = Number(sentAtByTicket[id] || 0);
+
+  if (now - lastSentAt < DEADLINE_NOTIFICATION_COOLDOWN_MS) {
+    return;
+  }
+
+  sendSystemDeadlineNotification(ticket);
+
+  sentAtByTicket[id] = now;
+  localStorage.setItem(
+    DEADLINE_NOTIFICATION_KEY,
+    JSON.stringify(sentAtByTicket)
+  );
 }
 
 const GMAIL_AUTH_TOKEN_KEY = "gmailAuthToken";
@@ -987,10 +1015,8 @@ function Workspace() {
 
       setDeadlineNotifications(deadlineItems);
 
-      await requestNotificationPermission();
-
       deadlineItems.forEach((ticket: Ticket) => {
-        sendSystemDeadlineNotification(ticket);
+        sendDeadlineNotificationOnce(ticket);
       });
       await loadDeletedMessages();
 
