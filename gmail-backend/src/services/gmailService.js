@@ -350,6 +350,7 @@ export async function fetchAndAnalyzeMessages(userId) {
           calendarEventLink: result.success ? result.htmlLink : null,
           calendarEventStatus: result.status,
           calendarEventError: result.success ? "" : result.error || "",
+          calendarEventNeedsReconnect: Boolean(result.needsReconnect),
           calendarEventCreatedAt: result.success ? new Date() : null,
         });
       }
@@ -418,11 +419,14 @@ export async function fetchAndAnalyzeMessages(userId) {
                   calendarEventStatus: primaryEvent.calendarEventStatus,
                   calendarEventType: primaryEvent.type,
                   calendarEventError: primaryEvent.calendarEventError,
+                  calendarEventNeedsReconnect:
+                    primaryEvent.calendarEventNeedsReconnect,
                   calendarEventCreatedAt: primaryEvent.calendarEventCreatedAt,
                 }
               : {
                   calendarEventStatus: "None",
                   calendarEventType: "None",
+                  calendarEventNeedsReconnect: false,
                 }),
 
             status: "Open",

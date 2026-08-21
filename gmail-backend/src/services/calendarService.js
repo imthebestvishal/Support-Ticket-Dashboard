@@ -19,6 +19,53 @@ const EVENT_TYPE_DEFAULT_DESCRIPTIONS = {
   Callback: "AI detected promised callback from customer email",
 };
 
+function googleErrorStatus(error) {
+  return (
+    error?.code ||
+    error?.response?.status ||
+    error?.response?.statusCode ||
+    500
+  );
+}
+
+function isGoogleCalendarPermissionError(error) {
+  const text = [
+    error?.message,
+    error?.response?.data?.error,
+    error?.response?.data?.error_description,
+    error?.response?.data?.message,
+    JSON.stringify(error?.errors || []),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return (
+    text.includes("insufficient") ||
+    text.includes("permission") ||
+    text.includes("forbidden") ||
+    text.includes("scope") ||
+    text.includes("invalid_grant") ||
+    text.includes("invalid credentials") ||
+    text.includes("login required") ||
+    text.includes("unauthorized") ||
+    text.includes("insufficient authentication")
+  );
+}
+
+function calendarPermissionFailure(error, type = "Deadline") {
+  return {
+    success: false,
+    status: "Failed",
+    type,
+    error:
+      "Calendar permission missing. Reconnect Google and approve Calendar access.",
+    needsReconnect: true,
+    provider: "google-calendar",
+    statusCode: googleErrorStatus(error),
+  };
+}
+
 /*
  * Creates a Google Calendar event for ANY AI-detected ticket event -
  * deadline, meeting, appointment, follow-up, reminder, or promised
@@ -73,6 +120,8 @@ export async function createCalendarEvent({
       status: "Failed",
       type: eventType,
       error: "Gmail account is not connected",
+      needsReconnect: true,
+      provider: "google-calendar",
     };
   }
 
@@ -154,11 +203,86 @@ export async function createCalendarEvent({
   } catch (error) {
     console.error("Google Calendar event creation failed:", error.message);
 
+    if (isGoogleCalendarPermissionError(error)) {
+      return calendarPermissionFailure(error, eventType);
+    }
+
     return {
       success: false,
       status: "Failed",
       type: eventType,
       error: error.message || "Failed to create calendar event",
+      provider: "google-calendar",
+      statusCode: googleErrorStatus(error),
+    };
+  }
+}
+
+export async function checkCalendarAccess({
+  accessToken,
+  refreshToken,
+}) {
+  if (!accessToken && !refreshToken) {
+    return {
+      connected: false,
+      calendarPermission: false,
+      needsReconnect: true,
+      provider: "google-calendar",
+      error: "Google account is not authenticated.",
+    };
+  }
+
+  const oauth2Client =
+    new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      process.env.GOOGLE_REDIRECT_URI
+    );
+
+  oauth2Client.setCredentials({
+    access_token: accessToken,
+    refresh_token: refreshToken,
+  });
+
+  const calendar = google.calendar({
+    version: "v3",
+    auth: oauth2Client,
+  });
+
+  try {
+    await calendar.events.list({
+      calendarId: "primary",
+      maxResults: 1,
+      singleEvents: true,
+      timeMin: new Date().toISOString(),
+    });
+
+    return {
+      connected: true,
+      calendarPermission: true,
+      needsReconnect: false,
+      provider: "google-calendar",
+    };
+  } catch (error) {
+    if (isGoogleCalendarPermissionError(error)) {
+      return {
+        connected: true,
+        calendarPermission: false,
+        needsReconnect: true,
+        provider: "google-calendar",
+        statusCode: googleErrorStatus(error),
+        error:
+          "Calendar permission missing. Reconnect Google and approve Calendar access.",
+      };
+    }
+
+    return {
+      connected: true,
+      calendarPermission: false,
+      needsReconnect: false,
+      provider: "google-calendar",
+      statusCode: googleErrorStatus(error),
+      error: error.message || "Failed to check Calendar access.",
     };
   }
 }

@@ -63,6 +63,7 @@ type Ticket = {
   calendarEventStatus?: string;
   calendarEventType?: string;
   calendarEventError?: string;
+  calendarEventNeedsReconnect?: boolean;
   calendarEventCreatedAt?: string | null;
   calendarEvents?: CalendarEventRecord[];
   replyDraft?: string;
@@ -86,6 +87,7 @@ type CalendarEventRecord = {
   calendarEventLink?: string | null;
   calendarEventStatus?: string;
   calendarEventError?: string;
+  calendarEventNeedsReconnect?: boolean;
   calendarEventCreatedAt?: string | null;
 };
 
@@ -1692,6 +1694,7 @@ function Workspace() {
     status: string;
     link?: string | null;
     error?: string;
+    needsReconnect?: boolean;
     createdAt?: string | null;
   };
 
@@ -1704,6 +1707,7 @@ function Workspace() {
         status: event.calendarEventStatus || "None",
         link: event.calendarEventLink,
         error: event.calendarEventError,
+        needsReconnect: event.calendarEventNeedsReconnect,
         createdAt: event.calendarEventCreatedAt,
       }));
     }
@@ -1717,6 +1721,7 @@ function Workspace() {
           status: t.calendarEventStatus || "None",
           link: t.calendarEventLink,
           error: t.calendarEventError,
+          needsReconnect: t.calendarEventNeedsReconnect,
           createdAt: t.calendarEventCreatedAt,
         },
       ];
@@ -2704,6 +2709,7 @@ function showAlerts() {
           calendarEventLink: ticket.calendarEventLink,
           calendarEventStatus: ticket.calendarEventStatus,
           calendarEventError: ticket.calendarEventError,
+          calendarEventNeedsReconnect: ticket.calendarEventNeedsReconnect,
         },
       ]
     : []
@@ -2730,6 +2736,15 @@ function showAlerts() {
           Calendar sync failed
           {event.calendarEventError && (
             <span className="ai-insight-detail">({event.calendarEventError})</span>
+          )}
+          {event.calendarEventNeedsReconnect && (
+            <button
+              type="button"
+              className="text-button calendar-open-btn"
+              onClick={connectGmail}
+            >
+              Reconnect Google Calendar
+            </button>
           )}
         </div>
       ) : (

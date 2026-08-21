@@ -1,5 +1,8 @@
 import { extractDeadline } from "../services/ticketIntelligenceService.js";
-import { createCalendarDeadline } from "../services/calendarService.js";
+import {
+  checkCalendarAccess,
+  createCalendarDeadline,
+} from "../services/calendarService.js";
 import express from "express";
 import mongoose from "mongoose";
 import { User } from "../models/user.js";
@@ -523,9 +526,19 @@ router.post("/assistant/create-deadline", requireAuth, async (req,res)=>{
 
     });
 
+    if (!event.success && event.needsReconnect) {
+      return res.status(403).send({
+        success: false,
+        error: event.error,
+        needsReconnect: true,
+        provider: event.provider || "google-calendar",
+        statusCode: event.statusCode || 403,
+        event,
+      });
+    }
 
     res.send({
-      success:true,
+      success: event.success,
       event
     });
 
@@ -542,6 +555,15 @@ router.post("/assistant/create-deadline", requireAuth, async (req,res)=>{
     });
 
   }
+});
+
+router.get("/calendar/status", requireAuth, async (req, res) => {
+  const status = await checkCalendarAccess({
+    accessToken: req.user.accessToken,
+    refreshToken: req.user.refreshToken,
+  });
+
+  res.status(status.needsReconnect ? 403 : 200).send(status);
 });
 
 export { router as apiRouter };

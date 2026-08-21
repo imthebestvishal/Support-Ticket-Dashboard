@@ -159,6 +159,11 @@ const messageSchema = new mongoose.Schema(
       default: "",
     },
 
+    calendarEventNeedsReconnect: {
+      type: Boolean,
+      default: false,
+    },
+
     calendarEventCreatedAt: {
       type: Date,
       default: null,
@@ -190,6 +195,7 @@ const messageSchema = new mongoose.Schema(
             enum: ["Scheduled", "Failed"],
           },
           calendarEventError: { type: String, default: "" },
+          calendarEventNeedsReconnect: { type: Boolean, default: false },
           calendarEventCreatedAt: { type: Date, default: null },
         },
       ],
