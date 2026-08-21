@@ -81,6 +81,7 @@ type Ticket = {
   sentiment?: string;
   status?: string;
   receivedAt?: string;
+  createdAt?: string;
   deletedAt?: string | null;
   expiresAt?: string | null;
   deadline?: string | null;
@@ -1824,6 +1825,22 @@ function Workspace() {
     );
   }, [tickets, search]);
 
+  const recentDashboardTickets = useMemo(() => {
+    const source = gmailMessages.length > 0 ? gmailMessages : tickets;
+    const realTickets = source.filter(
+      (ticket) => !String(ticket._id || "").startsWith("demo-")
+    );
+
+    return [...realTickets]
+      .sort((a, b) => {
+        const aTime = new Date(a.receivedAt || a.createdAt || 0).getTime();
+        const bTime = new Date(b.receivedAt || b.createdAt || 0).getTime();
+
+        return bTime - aTime;
+      })
+      .slice(0, 7);
+  }, [gmailMessages, tickets]);
+
   const filteredGmailMessages =
     useMemo(() => {
       const searchValue =
@@ -2585,7 +2602,12 @@ function showAlerts() {
                   </div>
 
                   <div className="dashboard-ticket-list">
-                    {filteredTickets.slice(0, 3).map((ticket) => (
+                    {recentDashboardTickets.length === 0 ? (
+                      <div className="dashboard-empty-state">
+                        <strong>No recent tickets yet</strong>
+                        <span>Sync Gmail or create a ticket to populate this list.</span>
+                      </div>
+                    ) : recentDashboardTickets.map((ticket) => (
                       <article className="dashboard-ticket-row" key={ticketId(ticket)}>
                         <CategoryIcon category={ticket.category} subject={ticket.subject} sender={ticket.sender} />
 
