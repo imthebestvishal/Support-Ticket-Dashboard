@@ -58,6 +58,11 @@ type Ticket = {
   deadline?: string | null;
   deadlineReason?: string;
   deadlineStatus?: string;
+  calendarEventId?: string | null;
+  calendarEventLink?: string | null;
+  calendarEventStatus?: string;
+  calendarEventError?: string;
+  calendarEventCreatedAt?: string | null;
   replyDraft?: string;
   sentReply?: string;
   replySentAt?: string | null;
@@ -136,6 +141,14 @@ function priorityClass(priority?: string) {
 
 function ticketId(ticket: Ticket) {
   return ticket._id || ticket.gmailMessageId || "";
+}
+
+function openGoogleCalendar(url?: string | null) {
+  window.open(
+    url || "https://calendar.google.com/calendar/r",
+    "_blank",
+    "noopener,noreferrer"
+  );
 }
 
 function hasUsableSender(sender?: string) {
@@ -1654,6 +1667,14 @@ function Workspace() {
     .sort((a, b) => new Date(a.deadline || 0).getTime() - new Date(b.deadline || 0).getTime())
     .slice(0, 4);
 
+  const calendarEventTickets = tickets
+    .filter((t) => t.calendarEventId)
+    .sort((a, b) => new Date(a.deadline || 0).getTime() - new Date(b.deadline || 0).getTime());
+
+  const calendarFailedCount = tickets.filter(
+    (t) => t.calendarEventStatus === "Failed"
+  ).length;
+
   const aiActionItems = tickets
     .filter((t) => t.status !== "Resolved" && (t.replyDraft || escalationRisk(t) !== "Low"))
     .slice(0, 4)
@@ -2283,6 +2304,45 @@ function showAlerts() {
                     </button>
                   </article>
 
+                  <article className="dashboard-card dashboard-side-card dashboard-calendar-card">
+                    <div className="dashboard-side-heading">
+                      <div className="ai-symbol" aria-hidden="true">📅</div>
+                      <div>
+                        <h2>Google Calendar</h2>
+                        <p>AI-detected deadlines synced to your calendar.</p>
+                      </div>
+                    </div>
+
+                    <div className="dashboard-connection">
+                      <span className={gmailStatus.startsWith("Connected") ? "green-dot" : "orange-dot"}></span>
+                      <span>
+                        {gmailStatus.startsWith("Connected") ? "Connected:" : "Status:"}
+                      </span>
+                      <strong>{gmailStatus.replace("Connected: ", "")}</strong>
+                    </div>
+
+                    <div className="autosync-status-list">
+                      <div className="autosync-status-row">
+                        <span>Events scheduled</span>
+                        <strong>{calendarEventTickets.length}</strong>
+                      </div>
+                      <div className="autosync-status-row">
+                        <span>Sync failures</span>
+                        <strong className={calendarFailedCount > 0 ? "text-danger" : "text-success"}>
+                          {calendarFailedCount}
+                        </strong>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="primary-button full"
+                      onClick={() => openGoogleCalendar()}
+                    >
+                      Open Google Calendar <span aria-hidden="true">→</span>
+                    </button>
+                  </article>
+
                   <article className="dashboard-card dashboard-side-card dashboard-ai-card">
                     <div className="dashboard-side-heading">
                       <div className="ai-symbol">AI</div>
@@ -2344,9 +2404,20 @@ function showAlerts() {
                               <strong>{ticket.subject || "Untitled ticket"}</strong>
                               <span>{ticket.deadlineStatus || "Deadline set"}</span>
                             </div>
-                            <span className={priorityClass(ticket.priority)}>
-                              {ticket.priority || "Medium"}
-                            </span>
+                            <div className="deadline-monitor-actions">
+                              <span className={priorityClass(ticket.priority)}>
+                                {ticket.priority || "Medium"}
+                              </span>
+                              {ticket.calendarEventLink && (
+                                <button
+                                  type="button"
+                                  className="text-button calendar-view-link"
+                                  onClick={() => openGoogleCalendar(ticket.calendarEventLink)}
+                                >
+                                  View in Calendar
+                                </button>
+                              )}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -2509,10 +2580,34 @@ function showAlerts() {
       <div>Deadline: {new Date(ticket.deadline).toLocaleString()}</div>
       {ticket.deadlineReason && <div>Deadline reason: {ticket.deadlineReason}</div>}
       <div>Deadline status: {ticket.deadlineStatus || "Upcoming"}</div>
-      <div className="calendar-status-row">
-        <span className="green-dot" />
-        Calendar event scheduled
-      </div>
+      {ticket.calendarEventStatus === "Scheduled" && ticket.calendarEventId ? (
+        <div className="calendar-status-row">
+          <span className="green-dot" />
+          Calendar event scheduled
+          {ticket.calendarEventLink && (
+            <button
+              type="button"
+              className="text-button calendar-open-btn"
+              onClick={() => openGoogleCalendar(ticket.calendarEventLink)}
+            >
+              Open in Google Calendar ↗
+            </button>
+          )}
+        </div>
+      ) : ticket.calendarEventStatus === "Failed" ? (
+        <div className="calendar-status-row">
+          <span className="orange-dot" />
+          Calendar sync failed
+          {ticket.calendarEventError && (
+            <span className="ai-insight-detail">({ticket.calendarEventError})</span>
+          )}
+        </div>
+      ) : (
+        <div className="calendar-status-row">
+          <span className="orange-dot" />
+          Not yet synced to calendar
+        </div>
+      )}
     </>
   )}
   {ticket.suggestedResponse && (

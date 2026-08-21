@@ -311,9 +311,11 @@ export async function fetchAndAnalyzeMessages(userId) {
         deadlineAI
       );
 
+      let calendarResult = null;
+
       if (deadlineAI.deadline) {
 
-        await createCalendarDeadline({
+        calendarResult = await createCalendarDeadline({
 
           accessToken:
             user.accessToken,
@@ -331,9 +333,17 @@ export async function fetchAndAnalyzeMessages(userId) {
 
         });
 
-        console.log(
-          "Google Calendar deadline created"
-        );
+        if (calendarResult.success) {
+          console.log(
+            "Google Calendar deadline created:",
+            calendarResult.id
+          );
+        } else {
+          console.error(
+            "Google Calendar deadline failed:",
+            calendarResult.error
+          );
+        }
       }
 
       const savedMessage =
@@ -369,6 +379,30 @@ export async function fetchAndAnalyzeMessages(userId) {
 
             isTicket:
               analysis.isTicket,
+
+            deadline:
+              deadlineAI.deadline,
+
+            deadlineReason:
+              deadlineAI.deadlineReason,
+
+            deadlineStatus:
+              deadlineAI.deadlineStatus,
+
+            ...(calendarResult
+              ? {
+                  calendarEventId:
+                    calendarResult.success ? calendarResult.id : null,
+                  calendarEventLink:
+                    calendarResult.success ? calendarResult.htmlLink : null,
+                  calendarEventStatus:
+                    calendarResult.status,
+                  calendarEventError:
+                    calendarResult.success ? "" : calendarResult.error || "",
+                  calendarEventCreatedAt:
+                    calendarResult.success ? new Date() : null,
+                }
+              : {}),
 
             status: "Open",
           },
