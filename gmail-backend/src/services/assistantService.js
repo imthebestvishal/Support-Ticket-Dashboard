@@ -5,7 +5,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 export async function askAssistant(question) {
   try {
     const model = genAI.getGenerativeModel({
-      model: "gemini-3.6-flash",
+      model: "gemini-2.5-flash",
     });
 
     const result = await model.generateContent([
