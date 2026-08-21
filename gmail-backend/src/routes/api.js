@@ -15,7 +15,10 @@ import {
   sendGmailReply,
   refineSupportReply,
 } from "../services/gmailService.js";
-import { askAssistant } from "../services/assistantService.js";
+import {
+  askAssistant,
+  getAssistantStatus,
+} from "../services/assistantService.js";
 
 const router = express.Router();
 
@@ -693,11 +696,14 @@ router.post("/assistant", async (req, res) => {
       });
     }
 
-    const answer = await askAssistant(question);
+    const result = await askAssistant(question);
 
     res.send({
-      answer,
-      source: "gemini",
+      answer: result.answer,
+      source: result.source,
+      provider: result.provider,
+      model: result.model,
+      providerError: result.providerError || "",
     });
 
   } catch (error) {
@@ -776,6 +782,10 @@ router.post("/assistant/create-deadline", requireAuth, async (req,res)=>{
     });
 
   }
+});
+
+router.get("/assistant/status", (_req, res) => {
+  res.send(getAssistantStatus());
 });
 
 router.get("/calendar/status", requireAuth, async (req, res) => {

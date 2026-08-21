@@ -517,8 +517,12 @@ function getAssistantSourceLabel(data: {
     return `AgentRouter · ${data.model || "configured model"}`;
   }
 
-  if (data.source !== "local-fallback") {
-    return "";
+  if (data.source === "openrouter") {
+    return `OpenRouter · ${data.model || "configured model"}`;
+  }
+
+  if (data.source !== "local-fallback" && data.source !== "fallback") {
+    return data.source || "";
   }
 
   if (
