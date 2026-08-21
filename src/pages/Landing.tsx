@@ -68,7 +68,7 @@ function Logo() {
   return (
     <Link to="/" className="landing-logo" aria-label="SupportHub home">
       <img
-        src="/assets/brand-logo.png"
+        src="/assets/brand_logo.png"
         alt="SupportHub Logo"
         style={{ height: "42px", maxWidth: "100%", objectFit: "contain" }}
       />

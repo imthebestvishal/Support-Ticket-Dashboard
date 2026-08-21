@@ -567,7 +567,7 @@ function getAssistantSourceLabel(data: {
 
 function SidebarLogo() {
   return (
-    <img src="/assets/brand-logo.png" alt="SupportHub Logo" style={{ height: "46px", maxWidth: "100%", objectFit: "contain" }} />
+    <img src="/assets/brand_logo.png" alt="SupportHub Logo" style={{ height: "46px", maxWidth: "100%", objectFit: "contain" }} />
   );
 }
 
