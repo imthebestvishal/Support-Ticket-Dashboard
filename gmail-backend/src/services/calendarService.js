@@ -66,6 +66,24 @@ function calendarPermissionFailure(error, type = "Deadline") {
   };
 }
 
+function getCalendarClient({ accessToken, refreshToken }) {
+  const oauth2Client = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    process.env.GOOGLE_REDIRECT_URI
+  );
+
+  oauth2Client.setCredentials({
+    access_token: accessToken,
+    refresh_token: refreshToken,
+  });
+
+  return google.calendar({
+    version: "v3",
+    auth: oauth2Client,
+  });
+}
+
 /*
  * Creates a Google Calendar event for ANY AI-detected ticket event -
  * deadline, meeting, appointment, follow-up, reminder, or promised
@@ -126,22 +144,9 @@ export async function createCalendarEvent({
   }
 
   try {
-    const oauth2Client =
-      new google.auth.OAuth2(
-        process.env.GOOGLE_CLIENT_ID,
-        process.env.GOOGLE_CLIENT_SECRET,
-        process.env.GOOGLE_REDIRECT_URI
-      );
-
-    oauth2Client.setCredentials({
-      access_token: accessToken,
-      refresh_token: refreshToken,
-    });
-
-
-    const calendar = google.calendar({
-      version: "v3",
-      auth: oauth2Client,
+    const calendar = getCalendarClient({
+      accessToken,
+      refreshToken,
     });
 
 
@@ -192,13 +197,34 @@ export async function createCalendarEvent({
 
     console.log("Google Calendar event created:", event.data.id);
 
+    const verified = await verifyCalendarEvent({
+      accessToken,
+      refreshToken,
+      eventId: event.data.id,
+    });
+
+    if (!verified.success) {
+      return {
+        success: false,
+        status: "Failed",
+        type: eventType,
+        id: event.data.id,
+        htmlLink: event.data.htmlLink || null,
+        error: verified.error || "Calendar event could not be verified.",
+        needsReconnect: Boolean(verified.needsReconnect),
+        provider: verified.provider || "google-calendar",
+        statusCode: verified.statusCode,
+      };
+    }
+
     return {
       success: true,
       status: "Scheduled",
       type: eventType,
       id: event.data.id,
-      htmlLink: event.data.htmlLink || null,
-      raw: event.data,
+      htmlLink: verified.htmlLink || event.data.htmlLink || null,
+      verified: true,
+      raw: verified.raw || event.data,
     };
   } catch (error) {
     console.error("Google Calendar event creation failed:", error.message);
@@ -212,6 +238,69 @@ export async function createCalendarEvent({
       status: "Failed",
       type: eventType,
       error: error.message || "Failed to create calendar event",
+      provider: "google-calendar",
+      statusCode: googleErrorStatus(error),
+    };
+  }
+}
+
+export async function verifyCalendarEvent({
+  accessToken,
+  refreshToken,
+  eventId,
+  type = "Deadline",
+}) {
+  if (!eventId) {
+    return {
+      success: false,
+      status: "Failed",
+      type,
+      error: "Calendar event id is missing.",
+      provider: "google-calendar",
+    };
+  }
+
+  if (!accessToken && !refreshToken) {
+    return {
+      success: false,
+      status: "Failed",
+      type,
+      error: "Gmail account is not connected",
+      needsReconnect: true,
+      provider: "google-calendar",
+    };
+  }
+
+  try {
+    const calendar = getCalendarClient({
+      accessToken,
+      refreshToken,
+    });
+
+    const event = await calendar.events.get({
+      calendarId: "primary",
+      eventId,
+    });
+
+    return {
+      success: true,
+      status: "Scheduled",
+      type,
+      id: event.data.id,
+      htmlLink: event.data.htmlLink || null,
+      provider: "google-calendar",
+      raw: event.data,
+    };
+  } catch (error) {
+    if (isGoogleCalendarPermissionError(error)) {
+      return calendarPermissionFailure(error, type);
+    }
+
+    return {
+      success: false,
+      status: "Failed",
+      type,
+      error: error.message || "Failed to verify calendar event",
       provider: "google-calendar",
       statusCode: googleErrorStatus(error),
     };
@@ -232,21 +321,9 @@ export async function checkCalendarAccess({
     };
   }
 
-  const oauth2Client =
-    new google.auth.OAuth2(
-      process.env.GOOGLE_CLIENT_ID,
-      process.env.GOOGLE_CLIENT_SECRET,
-      process.env.GOOGLE_REDIRECT_URI
-    );
-
-  oauth2Client.setCredentials({
-    access_token: accessToken,
-    refresh_token: refreshToken,
-  });
-
-  const calendar = google.calendar({
-    version: "v3",
-    auth: oauth2Client,
+  const calendar = getCalendarClient({
+    accessToken,
+    refreshToken,
   });
 
   try {

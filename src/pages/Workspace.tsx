@@ -100,6 +100,12 @@ type ReplyDraftState = {
   success: string;
 };
 
+type CalendarSyncState = {
+  loading?: boolean;
+  error?: string;
+  success?: string;
+};
+
 type SessionUser = {
   email?: string;
   image?: string;
@@ -236,6 +242,33 @@ function openGoogleCalendar(url?: string | null) {
     "_blank",
     "noopener,noreferrer"
   );
+}
+
+function calendarActionEvents(ticket: Ticket): CalendarEventRecord[] {
+  if (ticket.calendarEvents && ticket.calendarEvents.length > 0) {
+    return ticket.calendarEvents.filter((event) => Boolean(event.dateTime));
+  }
+
+  if (ticket.deadline) {
+    return [
+      {
+        type: ticket.calendarEventType && ticket.calendarEventType !== "None"
+          ? ticket.calendarEventType
+          : "Deadline",
+        title: ticket.subject || "Support deadline",
+        dateTime: ticket.deadline,
+        reason: ticket.deadlineReason || "",
+        calendarEventId: ticket.calendarEventId,
+        calendarEventLink: ticket.calendarEventLink,
+        calendarEventStatus: ticket.calendarEventStatus || "None",
+        calendarEventError: ticket.calendarEventError,
+        calendarEventNeedsReconnect: ticket.calendarEventNeedsReconnect,
+        calendarEventCreatedAt: ticket.calendarEventCreatedAt,
+      },
+    ];
+  }
+
+  return [];
 }
 
 function hasUsableSender(sender?: string) {
@@ -641,6 +674,9 @@ function Workspace() {
 
   const [replyDrafts, setReplyDrafts] =
     useState<Record<string, ReplyDraftState>>({});
+
+  const [calendarSyncStates, setCalendarSyncStates] =
+    useState<Record<string, CalendarSyncState>>({});
 
   const [assistantQuestion, setAssistantQuestion] =
     useState("");
@@ -1057,6 +1093,88 @@ function Workspace() {
       );
     } finally {
       setGmailLoading(false);
+    }
+  }
+
+  async function syncTicketCalendarEvent(ticket: Ticket, eventIndex: number) {
+    const id = ticketId(ticket);
+    const stateKey = `${id}:${eventIndex}`;
+
+    if (!id) {
+      return;
+    }
+
+    try {
+      setCalendarSyncStates((previous) => ({
+        ...previous,
+        [stateKey]: {
+          loading: true,
+          error: "",
+          success: "",
+        },
+      }));
+
+      const response = await fetch(
+        `${API}/api/messages/${encodeURIComponent(id)}/calendar-events/${eventIndex}/sync`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            ...getGmailAuthHeaders(),
+          },
+        }
+      );
+
+      const text = await response.text();
+      const data = JSON.parse(text);
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error ||
+            data.event?.calendarEventError ||
+            "Failed to add event to Google Calendar"
+        );
+      }
+
+      if (data.message) {
+        setTickets((previous) =>
+          previous.map((item) =>
+            ticketId(item) === id ? data.message : item
+          )
+        );
+
+        setGmailMessages((previous) =>
+          previous.map((item) =>
+            ticketId(item) === id ? data.message : item
+          )
+        );
+      }
+
+      setCalendarSyncStates((previous) => ({
+        ...previous,
+        [stateKey]: {
+          loading: false,
+          error: "",
+          success: data.verified
+            ? "Verified in Google Calendar"
+            : "Added to Google Calendar",
+        },
+      }));
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to add event to Google Calendar";
+
+      setCalendarSyncStates((previous) => ({
+        ...previous,
+        [stateKey]: {
+          loading: false,
+          error: message,
+          success: "",
+        },
+      }));
     }
   }
 
@@ -2456,7 +2574,7 @@ function showAlerts() {
                       <div className="ai-symbol" aria-hidden="true">📅</div>
                       <div>
                         <h2>Google Calendar</h2>
-                        <p>Every AI-detected event synced to your calendar.</p>
+                        <p>AI-detected events ready for reviewed calendar actions.</p>
                       </div>
                     </div>
 
@@ -2769,62 +2887,73 @@ function showAlerts() {
       <div>Deadline status: {ticket.deadlineStatus || "Upcoming"}</div>
     </>
   )}
-  {(ticket.calendarEvents && ticket.calendarEvents.length > 0
-    ? ticket.calendarEvents
-    : ticket.calendarEventId || ticket.calendarEventStatus === "Failed"
-    ? [
-        {
-          type: ticket.calendarEventType,
-          calendarEventId: ticket.calendarEventId,
-          calendarEventLink: ticket.calendarEventLink,
-          calendarEventStatus: ticket.calendarEventStatus,
-          calendarEventError: ticket.calendarEventError,
-          calendarEventNeedsReconnect: ticket.calendarEventNeedsReconnect,
-        },
-      ]
-    : []
-  ).map((event, index) => (
-    <div key={`${ticketId(ticket)}-cal-${index}`}>
-      <div>Calendar event type: {event.type || "Deadline"}</div>
-      {event.calendarEventStatus === "Scheduled" && event.calendarEventId ? (
-        <div className="calendar-status-row">
-          <span className="green-dot" />
-          Calendar event scheduled
-          {event.calendarEventLink && (
-            <button
-              type="button"
-              className="text-button calendar-open-btn"
-              onClick={() => openGoogleCalendar(event.calendarEventLink)}
-            >
-              Open in Google Calendar ↗
-            </button>
+  {calendarActionEvents(ticket).map((event, index) => {
+    const syncKey = `${ticketId(ticket)}:${index}`;
+    const syncState = calendarSyncStates[syncKey] || {};
+    const scheduled =
+      event.calendarEventStatus === "Scheduled" && event.calendarEventId;
+    const failed = event.calendarEventStatus === "Failed";
+
+    return (
+      <div className="ticket-calendar-action" key={`${ticketId(ticket)}-cal-${index}`}>
+        <div>
+          <span className="ai-insight-label">{event.type || "Calendar event"}</span>
+          <div className="ticket-calendar-title">
+            {event.title || ticket.subject || "Detected calendar event"}
+          </div>
+          {event.dateTime && (
+            <div className="ai-insight-detail">
+              {new Date(event.dateTime).toLocaleString()}
+            </div>
+          )}
+          {event.reason && (
+            <div className="ai-insight-detail">{event.reason}</div>
+          )}
+          {(failed || syncState.error) && (
+            <div className="calendar-status-row text-danger">
+              <span className="orange-dot" />
+              {syncState.error ||
+                event.calendarEventError ||
+                "Calendar sync failed"}
+            </div>
+          )}
+          {syncState.success && (
+            <div className="calendar-status-row text-success">
+              <span className="green-dot" />
+              {syncState.success}
+            </div>
           )}
         </div>
-      ) : event.calendarEventStatus === "Failed" ? (
-        <div className="calendar-status-row">
-          <span className="orange-dot" />
-          Calendar sync failed
-          {event.calendarEventError && (
-            <span className="ai-insight-detail">({event.calendarEventError})</span>
-          )}
-          {event.calendarEventNeedsReconnect && (
-            <button
-              type="button"
-              className="text-button calendar-open-btn"
-              onClick={connectGmail}
-            >
-              Reconnect Google Calendar
-            </button>
-          )}
-        </div>
-      ) : (
-        <div className="calendar-status-row">
-          <span className="orange-dot" />
-          Not yet synced to calendar
-        </div>
-      )}
-    </div>
-  ))}
+
+        {scheduled ? (
+          <button
+            type="button"
+            className="text-button calendar-open-btn"
+            onClick={() => openGoogleCalendar(event.calendarEventLink)}
+          >
+            Open in Google Calendar ↗
+          </button>
+        ) : event.calendarEventNeedsReconnect ? (
+          <button
+            type="button"
+            className="text-button calendar-open-btn"
+            onClick={connectGmail}
+          >
+            Reconnect Google Calendar
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="text-button calendar-open-btn"
+            onClick={() => syncTicketCalendarEvent(ticket, index)}
+            disabled={Boolean(syncState.loading)}
+          >
+            {syncState.loading ? "Adding..." : "Add to Calendar"}
+          </button>
+        )}
+      </div>
+    );
+  })}
   {ticket.suggestedResponse && (
     <div className="ai-suggested-reply-preview">
       <span className="ai-insight-label">AI suggested reply</span>

@@ -1,7 +1,9 @@
 import { extractDeadline } from "../services/ticketIntelligenceService.js";
 import {
   checkCalendarAccess,
+  createCalendarEvent,
   createCalendarDeadline,
+  verifyCalendarEvent,
 } from "../services/calendarService.js";
 import express from "express";
 import crypto from "crypto";
@@ -100,6 +102,43 @@ const findUserMessage = async (idParam, userId) => {
   return await Message.findOne({ gmailMessageId: cleanId, userId });
 };
 
+function primaryCalendarEvent(message) {
+  const events = Array.isArray(message.calendarEvents)
+    ? message.calendarEvents
+    : [];
+
+  return (
+    events.find((event) => event.type === "Deadline") ||
+    events[0] ||
+    null
+  );
+}
+
+function syncPrimaryCalendarFields(message) {
+  const primary = primaryCalendarEvent(message);
+
+  if (!primary) {
+    message.calendarEventId = null;
+    message.calendarEventLink = null;
+    message.calendarEventStatus = "None";
+    message.calendarEventType = "None";
+    message.calendarEventError = "";
+    message.calendarEventNeedsReconnect = false;
+    message.calendarEventCreatedAt = null;
+    return;
+  }
+
+  message.calendarEventId = primary.calendarEventId || null;
+  message.calendarEventLink = primary.calendarEventLink || null;
+  message.calendarEventStatus = primary.calendarEventStatus || "None";
+  message.calendarEventType = primary.type || "Deadline";
+  message.calendarEventError = primary.calendarEventError || "";
+  message.calendarEventNeedsReconnect = Boolean(
+    primary.calendarEventNeedsReconnect
+  );
+  message.calendarEventCreatedAt = primary.calendarEventCreatedAt || null;
+}
+
 // Gmail connection status
 router.get("/gmail/status", requireAuth, async (req, res) => {
   try {
@@ -191,10 +230,10 @@ router.get("/messages", requireAuth, async (req, res) => {
 //
 // NOTE: fetchAndAnalyzeMessages() (in gmailService.js) is the single
 // source of truth for both AI ticket analysis and calendar event
-// creation - it already analyzes every message with Gemini, detects
+// detection - it already analyzes every message with Gemini, detects
 // every calendar-worthy event (deadlines, meetings, appointments,
-// follow-ups, reminders, callbacks), creates the corresponding Google
-// Calendar events, and persists everything to the Message document.
+// follow-ups, reminders, callbacks), and persists them to the Message
+// document for reviewed Calendar creation from the UI.
 // This route must not re-run analysis or re-create calendar events,
 // or tickets would end up with duplicate calendar entries.
 router.post("/messages/fetch", requireAuth, async (req, res) => {
@@ -213,6 +252,141 @@ router.post("/messages/fetch", requireAuth, async (req, res) => {
     });
   }
 });
+
+router.post(
+  "/messages/:id/calendar-events/:eventIndex/sync",
+  requireAuth,
+  async (req, res) => {
+    try {
+      const message = await findUserMessage(req.params.id, req.user._id);
+
+      if (!message) {
+        return res.status(404).send({
+          error: "Message not found",
+        });
+      }
+
+      const events = Array.isArray(message.calendarEvents)
+        ? message.calendarEvents
+        : [];
+      const eventIndex = Number.parseInt(req.params.eventIndex, 10);
+
+      if (!Number.isInteger(eventIndex) || eventIndex < 0) {
+        return res.status(400).send({
+          error: "Invalid calendar event index.",
+        });
+      }
+
+      let event = events[eventIndex];
+
+      if (!event && eventIndex === 0 && message.deadline) {
+        events[0] = {
+          type: "Deadline",
+          title: message.subject || "Support deadline",
+          dateTime: message.deadline,
+          reason: message.deadlineReason || "",
+          calendarEventId: null,
+          calendarEventLink: null,
+          calendarEventStatus: "None",
+          calendarEventError: "",
+          calendarEventNeedsReconnect: false,
+          calendarEventCreatedAt: null,
+        };
+        message.calendarEvents = events;
+        event = events[0];
+      }
+
+      if (!event || !event.dateTime) {
+        return res.status(400).send({
+          error: "No event or deadline with a usable date/time was found.",
+        });
+      }
+
+      const eventType = event.type || "Deadline";
+
+      if (event.calendarEventId) {
+        const verified = await verifyCalendarEvent({
+          accessToken: req.user.accessToken,
+          refreshToken: req.user.refreshToken,
+          eventId: event.calendarEventId,
+          type: eventType,
+        });
+
+        event.calendarEventStatus = verified.status || "Failed";
+        event.calendarEventError = verified.success
+          ? ""
+          : verified.error || "Failed to verify calendar event";
+        event.calendarEventNeedsReconnect = Boolean(verified.needsReconnect);
+
+        if (verified.success) {
+          event.calendarEventId = verified.id || event.calendarEventId;
+          event.calendarEventLink =
+            verified.htmlLink || event.calendarEventLink || null;
+          event.calendarEventCreatedAt =
+            event.calendarEventCreatedAt || new Date();
+        }
+
+        syncPrimaryCalendarFields(message);
+        message.markModified("calendarEvents");
+        await message.save();
+
+        return res.status(verified.needsReconnect ? 403 : 200).send({
+          success: verified.success,
+          verified: verified.success,
+          event,
+          message,
+          error: verified.success ? undefined : verified.error,
+          needsReconnect: Boolean(verified.needsReconnect),
+          provider: verified.provider || "google-calendar",
+        });
+      }
+
+      const created = await createCalendarEvent({
+        accessToken: req.user.accessToken,
+        refreshToken: req.user.refreshToken,
+        subject: event.title || message.subject || "Support calendar event",
+        dateTime: event.dateTime,
+        reason: event.reason || message.summary || "",
+        type: eventType,
+      });
+
+      event.calendarEventStatus = created.status || "Failed";
+      event.calendarEventError = created.success
+        ? ""
+        : created.error || "Failed to create calendar event";
+      event.calendarEventNeedsReconnect = Boolean(created.needsReconnect);
+
+      if (created.id) {
+        event.calendarEventId = created.id;
+        event.calendarEventLink = created.htmlLink || null;
+      }
+
+      if (created.success) {
+        event.calendarEventCreatedAt = new Date();
+      }
+
+      syncPrimaryCalendarFields(message);
+      message.markModified("calendarEvents");
+      await message.save();
+
+      return res.status(created.needsReconnect ? 403 : 200).send({
+        success: created.success,
+        verified: Boolean(created.verified),
+        event,
+        message,
+        error: created.success ? undefined : created.error,
+        needsReconnect: Boolean(created.needsReconnect),
+        provider: created.provider || "google-calendar",
+      });
+    } catch (error) {
+      console.error("Calendar event sync error:", error);
+
+      return res.status(500).send({
+        error: error.message || "Failed to sync calendar event",
+      });
+    }
+  }
+);
 
 // Update ticket status
 router.patch("/messages/:id/status", requireAuth, async (req, res) => {

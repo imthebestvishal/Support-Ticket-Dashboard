@@ -169,7 +169,7 @@ const messageSchema = new mongoose.Schema(
       default: null,
     },
 
-    // Every AI-detected calendar event created for this ticket (a single
+    // Every AI-detected calendar event for this ticket (a single
     // email can surface more than one: e.g. a meeting AND a follow-up).
     calendarEvents: {
       type: [
@@ -192,7 +192,8 @@ const messageSchema = new mongoose.Schema(
           calendarEventLink: { type: String, default: null },
           calendarEventStatus: {
             type: String,
-            enum: ["Scheduled", "Failed"],
+            enum: ["None", "Scheduled", "Failed"],
+            default: "None",
           },
           calendarEventError: { type: String, default: "" },
           calendarEventNeedsReconnect: { type: Boolean, default: false },

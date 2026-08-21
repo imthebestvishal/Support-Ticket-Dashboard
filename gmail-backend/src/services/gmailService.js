@@ -2,7 +2,6 @@ import { google } from "googleapis";
 import { User } from "../models/user.js";
 import { Message } from "../models/message.js";
 import { extractCalendarEvents } from "./ticketIntelligenceService.js";
-import { createCalendarEvent } from "./calendarService.js";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
@@ -314,44 +313,22 @@ export async function fetchAndAnalyzeMessages(userId) {
         calendarAI
       );
 
-      // Single source of calendar creation: every detected event is
-      // synced here, once, via createCalendarEvent. No other code path
-      // should create calendar events for a freshly fetched Gmail message.
+      // Store detected calendar-worthy events for reviewed creation from
+      // the UI. Calendar writes happen only after the user clicks Add.
       const calendarEventRecords = [];
 
       for (const detectedEvent of calendarAI.events) {
-        const result = await createCalendarEvent({
-          accessToken: user.accessToken,
-          refreshToken: user.refreshToken,
-          subject: detectedEvent.title || subject,
-          dateTime: detectedEvent.dateTime,
-          reason: detectedEvent.reason,
-          type: detectedEvent.type,
-        });
-
-        if (result.success) {
-          console.log(
-            `Google Calendar ${detectedEvent.type} created:`,
-            result.id
-          );
-        } else {
-          console.error(
-            `Google Calendar ${detectedEvent.type} failed:`,
-            result.error
-          );
-        }
-
         calendarEventRecords.push({
           type: detectedEvent.type,
           title: detectedEvent.title || "",
           dateTime: detectedEvent.dateTime,
           reason: detectedEvent.reason || "",
-          calendarEventId: result.success ? result.id : null,
-          calendarEventLink: result.success ? result.htmlLink : null,
-          calendarEventStatus: result.status,
-          calendarEventError: result.success ? "" : result.error || "",
-          calendarEventNeedsReconnect: Boolean(result.needsReconnect),
-          calendarEventCreatedAt: result.success ? new Date() : null,
+          calendarEventId: null,
+          calendarEventLink: null,
+          calendarEventStatus: "None",
+          calendarEventError: "",
+          calendarEventNeedsReconnect: false,
+          calendarEventCreatedAt: null,
         });
       }
 
