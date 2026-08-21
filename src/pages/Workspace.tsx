@@ -177,8 +177,15 @@ function hasCalendarSignal(ticket: Ticket) {
   );
 }
 
-function RelevantChips({ ticket }: { ticket: Ticket }) {
-  const showPriority = hasImportantPriority(ticket);
+function RelevantChips({
+  ticket,
+  showPriority = false,
+}: {
+  ticket: Ticket;
+  showPriority?: boolean;
+}) {
+  const shouldShowPriority =
+    showPriority || hasImportantPriority(ticket);
   const showStatus = hasMeaningfulStatus(ticket);
   const showCalendar = hasCalendarSignal(ticket);
   const typeLabel =
@@ -187,7 +194,7 @@ function RelevantChips({ ticket }: { ticket: Ticket }) {
       : "";
   const showType = Boolean(
     typeLabel ||
-      (ticket.category && (showPriority || showStatus || showCalendar))
+      (ticket.category && (shouldShowPriority || showStatus || showCalendar))
   );
 
   return (
@@ -198,7 +205,7 @@ function RelevantChips({ ticket }: { ticket: Ticket }) {
         </span>
       )}
 
-      {showPriority && (
+      {shouldShowPriority && ticket.priority && (
         <span className={priorityClass(ticket.priority)}>
           {ticket.priority}
         </span>
@@ -3529,7 +3536,7 @@ function showAlerts() {
                                 "180px",
                             }}
                           >
-                            <RelevantChips ticket={mail} />
+                            <RelevantChips ticket={mail} showPriority />
 
                             <button
                               className="delete-button"
