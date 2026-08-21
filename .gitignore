@@ -3,3 +3,9 @@ node_modules/
 dist/
 src_old_final/
 public_old_final/
+gmail-backend/check-messages.js
+gmail-backend/check-users.js
+gmail-backend/remove-old-user.js
+gmail-backend/src/services/gmailSyncService.backup.js
+gmail-backend/test-gemini.js
+gmail-backend/test-mongo.js
