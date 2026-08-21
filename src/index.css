@@ -7089,6 +7089,12 @@ body.dark-theme .tab-hero-heading h2 {
   white-space: nowrap;
 }
 
+.calendar-row-action {
+  border-color: #b7d8ad;
+  color: var(--sh-accent-strong, #347928);
+  background: #f4fbf1;
+}
+
 .ai-suggested-reply-preview {
   margin-top: 6px;
   padding: 10px 12px;

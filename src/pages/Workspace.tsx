@@ -2839,6 +2839,16 @@ function showAlerts() {
                         const canReply =
                           Boolean(ticket.gmailMessageId) &&
                           hasUsableSender(ticket.sender);
+                        const rowCalendarEvents = calendarActionEvents(ticket);
+                        const rowCalendarEvent = rowCalendarEvents[0];
+                        const rowCalendarStateKey = rowCalendarEvent
+                          ? `${id}:0`
+                          : "";
+                        const rowCalendarSyncState =
+                          calendarSyncStates[rowCalendarStateKey] || {};
+                        const rowCalendarScheduled =
+                          rowCalendarEvent?.calendarEventStatus === "Scheduled" &&
+                          rowCalendarEvent?.calendarEventId;
 
                         return (
                           <article
@@ -2988,6 +2998,44 @@ function showAlerts() {
 
                               <div className="badges">
                                 <RelevantChips ticket={ticket} />
+
+                                {rowCalendarEvent && (
+                                  rowCalendarScheduled ? (
+                                    <button
+                                      type="button"
+                                      className="outline-button compact-action calendar-row-action"
+                                      onClick={() =>
+                                        openGoogleCalendar(
+                                          rowCalendarEvent.calendarEventLink
+                                        )
+                                      }
+                                    >
+                                      Open Calendar
+                                    </button>
+                                  ) : rowCalendarEvent.calendarEventNeedsReconnect ? (
+                                    <button
+                                      type="button"
+                                      className="outline-button compact-action calendar-row-action"
+                                      onClick={connectGmail}
+                                    >
+                                      Reconnect Calendar
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      className="outline-button compact-action calendar-row-action"
+                                      onClick={() =>
+                                        syncTicketCalendarEvent(ticket, 0)
+                                      }
+                                      disabled={Boolean(rowCalendarSyncState.loading)}
+                                      title={`Add ${rowCalendarEvent.type || "event"} to Google Calendar`}
+                                    >
+                                      {rowCalendarSyncState.loading
+                                        ? "Adding..."
+                                        : "Add to Calendar"}
+                                    </button>
+                                  )
+                                )}
 
                                 <button
                                   className="outline-button compact-action"
