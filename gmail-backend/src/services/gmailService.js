@@ -259,7 +259,7 @@ function getHeader(headers, name) {
 
 /*
 |--------------------------------------------------------------------------
-| Fetch unread Gmail messages and create tickets
+| Fetch recent Gmail inbox messages and create/update tickets
 |--------------------------------------------------------------------------
 */
 

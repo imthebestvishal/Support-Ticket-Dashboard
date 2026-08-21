@@ -3489,7 +3489,11 @@ function showAlerts() {
                 <div className="gmail-integration-actions">
                   <button
                     className="outline-button"
-                    onClick={loadGmailMessages}
+                    onClick={
+                      gmailStatus.startsWith("Connected")
+                        ? analyzeGmail
+                        : connectGmail
+                    }
                     disabled={gmailLoading}
                   >
                     {gmailLoading ? "Syncing..." : "Sync Emails"}
