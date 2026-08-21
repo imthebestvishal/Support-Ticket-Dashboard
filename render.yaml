@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: support-ticket-dashboard-backend
+    runtime: node
+    rootDir: gmail-backend
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
