@@ -205,7 +205,7 @@ async function callOpenRouter(question) {
       "Content-Type": "application/json",
       Accept: "application/json",
       "HTTP-Referer": process.env.FRONTEND_URL || "http://localhost:5173",
-      "X-Title": "Support Ticket Dashboard",
+      "X-Title": "Sentimail",
     },
     body: JSON.stringify({
       model: config.model,

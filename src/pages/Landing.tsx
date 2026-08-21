@@ -24,9 +24,9 @@ const featureHighlights = [
 
 const helpCenterFaqs = [
   {
-    question: "How does SupportHub integrate with Gmail?",
+    question: "How does Sentimail integrate with Gmail?",
     answer:
-      "SupportHub connects seamlessly via Google OAuth 2.0 and official Gmail APIs to analyze support emails, categorize them automatically into 6 priority types, and generate AI-driven summaries without storing sensitive credentials.",
+      "Sentimail connects seamlessly via Google OAuth 2.0 and official Gmail APIs to analyze support emails, categorize them automatically into 6 priority types, and generate AI-driven summaries without storing sensitive credentials.",
   },
   {
     question: "How does AI Email Categorization work?",
@@ -194,7 +194,7 @@ export default function Landing() {
         <div className="landing-section-heading scroll-reveal">
           <h2>The next support actions stay visible.</h2>
           <p>
-            SupportHub turns Gmail conversations into prioritized support tickets with AI summaries,
+            Sentimail turns Gmail conversations into prioritized support tickets with AI summaries,
             reply assistance, deadline awareness, and team-ready follow-up signals.
           </p>
         </div>
@@ -219,7 +219,7 @@ export default function Landing() {
             <p className="eyebrow">FEATURES & CAPABILITIES</p>
             <h2>Intelligent Support Operations</h2>
             <p className="subtitle">
-              Discover how SupportHub automates customer email triage, priority categorization, and task reminders.
+              Discover how Sentimail automates customer email triage, priority categorization, and task reminders.
             </p>
           </div>
 
@@ -263,7 +263,7 @@ export default function Landing() {
       <section id="help-center" className="landing-section-block landing-tab-view landing-help-view">
         <div className="tab-hero-heading scroll-reveal">
           <p className="eyebrow">HELP CENTER & FAQ</p>
-          <h2>How SupportHub Works</h2>
+          <h2>How Sentimail Works</h2>
           <p className="subtitle">
             Everything you need to know about setting up Gmail integration, managing tickets, and AI data security.
           </p>
@@ -282,10 +282,10 @@ export default function Landing() {
       {/* SECTION 4: ABOUT */}
       <section id="about" className="landing-section-block landing-tab-view landing-about-view">
         <div className="tab-hero-heading scroll-reveal">
-          <p className="eyebrow">ABOUT SUPPORTHUB</p>
+          <p className="eyebrow">ABOUT SENTIMAIL</p>
           <h2>Empowering Support Teams with AI</h2>
           <p className="subtitle">
-            SupportHub is an intelligent support dashboard built to streamline email triage, prioritize customer urgency, and eliminate manual queue management.
+            Sentimail is an intelligent support dashboard built to streamline email triage, prioritize customer urgency, and eliminate manual queue management.
           </p>
         </div>
 
@@ -303,7 +303,7 @@ export default function Landing() {
       <section className="landing-closing scroll-reveal">
         <h2>Built for scanning, triage, and action.</h2>
         <button onClick={() => navigate("/auth?mode=signup")} className="hero-cta-button">
-          <span>Start with SupportHub</span>
+          <span>Start with Sentimail</span>
           <span className="arrow-icon" aria-hidden="true">
             →
           </span>

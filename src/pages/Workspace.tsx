@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { authClient } from "../lib/auth";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:5000";
-const DEADLINE_NOTIFICATION_KEY = "supporthubDeadlineNotifications";
+const DEADLINE_NOTIFICATION_KEY = "sentimailDeadlineNotifications";
 const DEADLINE_NOTIFICATION_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
 

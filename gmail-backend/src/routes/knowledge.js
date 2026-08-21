@@ -42,7 +42,7 @@ const sampleArticles = [
   {
     title: "Service Outage Escalation & Priority SLA Levels",
     content:
-      "Critical Severity 1 outages affecting >10% of workspace traffic require a 15-minute response SLA. Use the 'Escalate Issue' button in the Support Ticket Dashboard to alert the on-call engineer and post a status banner to the customer notification portal.",
+      "Critical Severity 1 outages affecting >10% of workspace traffic require a 15-minute response SLA. Use the 'Escalate Issue' button in Sentimail to alert the on-call engineer and post a status banner to the customer notification portal.",
     category: "Technical",
     tags: ["sla", "outage", "escalation", "incident", "downtime"],
   },
