@@ -1601,6 +1601,10 @@ function Workspace() {
   const greeting =
     getGreeting();
 
+  const pendingDeadlineNotifications = deadlineNotifications.filter(
+    (ticket) => !completedDeadlines.includes(ticket._id || "")
+  );
+
   function completeDeadline(ticketId: string) {
     setCompletedDeadlines((prev) => [
       ...prev,
@@ -1610,22 +1614,6 @@ function Workspace() {
     setTopbarNotice(
       "Deadline marked completed"
     );
-}
-
-
-function openCalendar(ticket: Ticket) {
-
-    if (ticket.deadline) {
-
-      const calendarUrl =
-        `https://calendar.google.com/calendar/r/eventedit?text=${encodeURIComponent(ticket.subject || "Support Ticket")}`;
-
-      window.open(
-        calendarUrl,
-        "_blank"
-      );
-
-    }
 }
 
 
@@ -1709,8 +1697,24 @@ function showAlerts() {
           <SidebarLogo />
         </div>
 
-        
+        <nav style={{ "--active-index": activeIndex } as CSSProperties}>
+          <span className="nav-active-indicator" aria-hidden="true" />
 
+          {navigation.map((item) => (
+            <button
+              key={item.name}
+              type="button"
+              className={`nav-item${activeNavName === item.name ? " active" : ""}`}
+              onClick={() => setActive(item.name)}
+              aria-current={activeNavName === item.name ? "page" : undefined}
+            >
+              <span className="nav-icon">
+                <NavIcon name={item.name} isDark={theme === "dark"} />
+              </span>
+              <span>{item.name}</span>
+            </button>
+          ))}
+        </nav>
 
       </aside>
 
@@ -1740,14 +1744,14 @@ function showAlerts() {
           <div className="top-actions">
 
             <button
-              className={`icon-button notification-button${active === "AI Assistant" ? " has-badge" : ""}`}
+              className={`icon-button notification-button${pendingDeadlineNotifications.length > 0 ? " has-badge" : ""}`}
               title="Notifications"
               aria-label="Notifications"
               type="button"
               onClick={showAlerts}
             >
-              
-              {active === "AI Assistant" && <span className="notification-badge-dot" />}
+              <NavIcon name="Notifications" />
+              {pendingDeadlineNotifications.length > 0 && <span className="notification-badge-dot" />}
             </button>
 
             <button
@@ -1802,6 +1806,44 @@ function showAlerts() {
 
           </div>
 
+          {showNotificationPanel && (
+            <div className="notification-center-popover">
+              <div className="notification-center">
+                <div className="notification-center-header">
+                  <h2>Deadline Alerts</h2>
+                  <button
+                    type="button"
+                    className="notification-close"
+                    onClick={() => setShowNotificationPanel(false)}
+                  >
+                    Close
+                  </button>
+                </div>
+
+                {pendingDeadlineNotifications.length === 0 ? (
+                  <div className="notification-empty">
+                    <NavIcon name="Notifications" />
+                    <p>No deadline alerts right now.</p>
+                  </div>
+                ) : (
+                  pendingDeadlineNotifications.map((ticket) => (
+                    <div className="notification-item" key={ticket._id}>
+                      <strong>{ticket.subject || "Untitled ticket"}</strong>
+                      <p>{ticket.deadlineReason || ticket.deadlineStatus}</p>
+                      <button
+                        type="button"
+                        className="notification-close"
+                        onClick={() => ticket._id && completeDeadline(ticket._id)}
+                      >
+                        Mark done
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
         </header>
 
         <section className="content">
@@ -1847,13 +1889,14 @@ function showAlerts() {
                 <div className="dashboard-hero-actions">
                   <div className="dashboard-top-actions">
                     <button
-                      className="icon-button notification-button"
+                      className={`icon-button notification-button${pendingDeadlineNotifications.length > 0 ? " has-badge" : ""}`}
                       title="Notifications"
                       aria-label="Notifications"
                       type="button"
                       onClick={showAlerts}
                     >
-    
+                      <NavIcon name="Notifications" />
+                      {pendingDeadlineNotifications.length > 0 && <span className="notification-badge-dot" />}
                     </button>
 
                     <button
@@ -1919,7 +1962,11 @@ function showAlerts() {
 
                       {stat.chart === "alert" && (
                         <div className="metric-alert">
-        
+                          <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+                            <line x1="12" y1="9" x2="12" y2="13" />
+                            <line x1="12" y1="17" x2="12.01" y2="17" />
+                          </svg>
                         </div>
                       )}
                     </div>
@@ -3067,7 +3114,7 @@ function showAlerts() {
                         ⚠️
                       </div>
                       <div className="chat-bubble assistant-bubble error-bubble">
-                        <p style={{ color: "#ef4444", margin: 0 }}>{assistantError}</p>
+                        <p className="assistant-error-text">{assistantError}</p>
                       </div>
                     </div>
                   )}
