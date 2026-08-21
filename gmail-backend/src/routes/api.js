@@ -1,4 +1,4 @@
-import { analyzeTicket, extractDeadline } from "../services/ticketIntelligenceService.js";
+import { extractDeadline } from "../services/ticketIntelligenceService.js";
 import { createCalendarDeadline } from "../services/calendarService.js";
 import express from "express";
 import mongoose from "mongoose";
@@ -140,60 +140,18 @@ router.get("/messages", requireAuth, async (req, res) => {
 });
 
 // Fetch unread Gmail messages and analyze them with Gemini
+//
+// NOTE: fetchAndAnalyzeMessages() (in gmailService.js) is the single
+// source of truth for both AI ticket analysis and calendar event
+// creation - it already analyzes every message with Gemini, detects
+// every calendar-worthy event (deadlines, meetings, appointments,
+// follow-ups, reminders, callbacks), creates the corresponding Google
+// Calendar events, and persists everything to the Message document.
+// This route must not re-run analysis or re-create calendar events,
+// or tickets would end up with duplicate calendar entries.
 router.post("/messages/fetch", requireAuth, async (req, res) => {
   try {
     const result = await fetchAndAnalyzeMessages(req.user._id);
-
-    for (const message of result) {
-
-      const ai = analyzeTicket(
-        `${message.subject || ""} ${message.body || ""}`
-      );
-
-      message.category = ai.category;
-      message.priority = ai.priority;
-      message.sentiment = ai.sentiment;
-      message.summary = ai.summary;
-      message.escalationRisk = ai.escalationRisk;
-      message.escalationRecommendation = ai.escalationRecommendation;
-
-      const deadlineAI = await extractDeadline(
-        `${message.subject || ""} ${message.body || ""}`
-      );
-
-      console.log("AI Deadline Result:", deadlineAI);
-
-      message.deadline = deadlineAI.deadline;
-      message.deadlineReason = deadlineAI.deadlineReason;
-      message.deadlineStatus = deadlineAI.deadlineStatus;
-
-
-      if (deadlineAI.deadline) {
-
-        await createCalendarDeadline({
-
-          accessToken:
-            req.user.accessToken,
-
-          refreshToken:
-            req.user.refreshToken,
-
-          subject:
-            message.subject,
-
-          deadline:
-            deadlineAI.deadline,
-
-          reason:
-            deadlineAI.deadlineReason,
-
-        });
-
-      }
-
-
-      await message.save();
-    }
 
     res.send({
       count: result.length,

@@ -121,6 +121,81 @@ const messageSchema = new mongoose.Schema(
       default: "None",
     },
 
+    // Primary/most relevant AI-created calendar event for this ticket
+    // (Deadline events take priority when several event types are
+    // detected on the same ticket; see gmailService.js).
+    calendarEventId: {
+      type: String,
+      default: null,
+    },
+
+    calendarEventLink: {
+      type: String,
+      default: null,
+    },
+
+    calendarEventStatus: {
+      type: String,
+      enum: ["None", "Scheduled", "Failed"],
+      default: "None",
+    },
+
+    calendarEventType: {
+      type: String,
+      enum: [
+        "None",
+        "Deadline",
+        "Meeting",
+        "Appointment",
+        "Follow-up",
+        "Reminder",
+        "Callback",
+      ],
+      default: "None",
+    },
+
+    calendarEventError: {
+      type: String,
+      default: "",
+    },
+
+    calendarEventCreatedAt: {
+      type: Date,
+      default: null,
+    },
+
+    // Every AI-detected calendar event created for this ticket (a single
+    // email can surface more than one: e.g. a meeting AND a follow-up).
+    calendarEvents: {
+      type: [
+        {
+          type: {
+            type: String,
+            enum: [
+              "Deadline",
+              "Meeting",
+              "Appointment",
+              "Follow-up",
+              "Reminder",
+              "Callback",
+            ],
+          },
+          title: { type: String, default: "" },
+          dateTime: { type: Date, default: null },
+          reason: { type: String, default: "" },
+          calendarEventId: { type: String, default: null },
+          calendarEventLink: { type: String, default: null },
+          calendarEventStatus: {
+            type: String,
+            enum: ["Scheduled", "Failed"],
+          },
+          calendarEventError: { type: String, default: "" },
+          calendarEventCreatedAt: { type: Date, default: null },
+        },
+      ],
+      default: [],
+    },
+
     isTicket: {
       type: Boolean,
       default: true,

@@ -61,8 +61,10 @@ type Ticket = {
   calendarEventId?: string | null;
   calendarEventLink?: string | null;
   calendarEventStatus?: string;
+  calendarEventType?: string;
   calendarEventError?: string;
   calendarEventCreatedAt?: string | null;
+  calendarEvents?: CalendarEventRecord[];
   replyDraft?: string;
   sentReply?: string;
   replySentAt?: string | null;
@@ -73,6 +75,18 @@ type Ticket = {
   escalationReason?: string;
   suggestedResponse?: string;
   isTicket?: boolean;
+};
+
+type CalendarEventRecord = {
+  type?: string;
+  title?: string;
+  dateTime?: string | null;
+  reason?: string;
+  calendarEventId?: string | null;
+  calendarEventLink?: string | null;
+  calendarEventStatus?: string;
+  calendarEventError?: string;
+  calendarEventCreatedAt?: string | null;
 };
 
 type ReplyDraftState = {
@@ -1667,13 +1681,71 @@ function Workspace() {
     .sort((a, b) => new Date(a.deadline || 0).getTime() - new Date(b.deadline || 0).getTime())
     .slice(0, 4);
 
-  const calendarEventTickets = tickets
-    .filter((t) => t.calendarEventId)
-    .sort((a, b) => new Date(a.deadline || 0).getTime() - new Date(b.deadline || 0).getTime());
+  // Flatten every AI-created calendar event across all tickets - a single
+  // ticket can carry more than one event (e.g. a meeting AND a follow-up),
+  // stored in calendarEvents[]. Older/legacy tickets that only ever got a
+  // single primary calendar event fall back to their top-level fields.
+  type CalendarEventEntry = {
+    ticket: Ticket;
+    type: string;
+    title: string;
+    status: string;
+    link?: string | null;
+    error?: string;
+    createdAt?: string | null;
+  };
 
-  const calendarFailedCount = tickets.filter(
-    (t) => t.calendarEventStatus === "Failed"
-  ).length;
+  const allCalendarEvents: CalendarEventEntry[] = tickets.flatMap((t) => {
+    if (t.calendarEvents && t.calendarEvents.length > 0) {
+      return t.calendarEvents.map((event) => ({
+        ticket: t,
+        type: event.type || "Deadline",
+        title: event.title || t.subject || "Untitled ticket",
+        status: event.calendarEventStatus || "None",
+        link: event.calendarEventLink,
+        error: event.calendarEventError,
+        createdAt: event.calendarEventCreatedAt,
+      }));
+    }
+
+    if (t.calendarEventId || t.calendarEventStatus === "Failed") {
+      return [
+        {
+          ticket: t,
+          type: t.calendarEventType || "Deadline",
+          title: t.subject || "Untitled ticket",
+          status: t.calendarEventStatus || "None",
+          link: t.calendarEventLink,
+          error: t.calendarEventError,
+          createdAt: t.calendarEventCreatedAt,
+        },
+      ];
+    }
+
+    return [];
+  });
+
+  const scheduledCalendarEvents = allCalendarEvents
+    .filter((event) => event.status === "Scheduled")
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+    );
+
+  const failedCalendarEvents = allCalendarEvents.filter(
+    (event) => event.status === "Failed"
+  );
+
+  const calendarEventTickets = scheduledCalendarEvents;
+  const calendarFailedCount = failedCalendarEvents.length;
+
+  const calendarEventCountsByType = scheduledCalendarEvents.reduce(
+    (acc, event) => {
+      acc[event.type] = (acc[event.type] || 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>
+  );
 
   const aiActionItems = tickets
     .filter((t) => t.status !== "Resolved" && (t.replyDraft || escalationRisk(t) !== "Low"))
@@ -2309,7 +2381,7 @@ function showAlerts() {
                       <div className="ai-symbol" aria-hidden="true">📅</div>
                       <div>
                         <h2>Google Calendar</h2>
-                        <p>AI-detected deadlines synced to your calendar.</p>
+                        <p>Every AI-detected event synced to your calendar.</p>
                       </div>
                     </div>
 
@@ -2323,8 +2395,20 @@ function showAlerts() {
 
                     <div className="autosync-status-list">
                       <div className="autosync-status-row">
-                        <span>Events scheduled</span>
-                        <strong>{calendarEventTickets.length}</strong>
+                        <span>Total calendar events</span>
+                        <strong>{scheduledCalendarEvents.length}</strong>
+                      </div>
+                      <div className="autosync-status-row">
+                        <span>Deadlines</span>
+                        <strong>{calendarEventCountsByType["Deadline"] || 0}</strong>
+                      </div>
+                      <div className="autosync-status-row">
+                        <span>Meetings</span>
+                        <strong>{calendarEventCountsByType["Meeting"] || 0}</strong>
+                      </div>
+                      <div className="autosync-status-row">
+                        <span>Reminders</span>
+                        <strong>{calendarEventCountsByType["Reminder"] || 0}</strong>
                       </div>
                       <div className="autosync-status-row">
                         <span>Sync failures</span>
@@ -2333,6 +2417,34 @@ function showAlerts() {
                         </strong>
                       </div>
                     </div>
+
+                    {scheduledCalendarEvents.length > 0 && (
+                      <div className="deadline-monitor-list calendar-events-list">
+                        {scheduledCalendarEvents.slice(0, 5).map((event, index) => (
+                          <div
+                            className="deadline-monitor-row"
+                            key={`${ticketId(event.ticket)}-${index}`}
+                          >
+                            <div>
+                              <strong>{event.title}</strong>
+                              <span>{event.type}</span>
+                            </div>
+                            <div className="deadline-monitor-actions">
+                              <span className="badge badge-gray">{event.type}</span>
+                              {event.link && (
+                                <button
+                                  type="button"
+                                  className="text-button calendar-view-link"
+                                  onClick={() => openGoogleCalendar(event.link)}
+                                >
+                                  View in Calendar
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
                     <button
                       type="button"
@@ -2580,26 +2692,44 @@ function showAlerts() {
       <div>Deadline: {new Date(ticket.deadline).toLocaleString()}</div>
       {ticket.deadlineReason && <div>Deadline reason: {ticket.deadlineReason}</div>}
       <div>Deadline status: {ticket.deadlineStatus || "Upcoming"}</div>
-      {ticket.calendarEventStatus === "Scheduled" && ticket.calendarEventId ? (
+    </>
+  )}
+  {(ticket.calendarEvents && ticket.calendarEvents.length > 0
+    ? ticket.calendarEvents
+    : ticket.calendarEventId || ticket.calendarEventStatus === "Failed"
+    ? [
+        {
+          type: ticket.calendarEventType,
+          calendarEventId: ticket.calendarEventId,
+          calendarEventLink: ticket.calendarEventLink,
+          calendarEventStatus: ticket.calendarEventStatus,
+          calendarEventError: ticket.calendarEventError,
+        },
+      ]
+    : []
+  ).map((event, index) => (
+    <div key={`${ticketId(ticket)}-cal-${index}`}>
+      <div>Calendar event type: {event.type || "Deadline"}</div>
+      {event.calendarEventStatus === "Scheduled" && event.calendarEventId ? (
         <div className="calendar-status-row">
           <span className="green-dot" />
           Calendar event scheduled
-          {ticket.calendarEventLink && (
+          {event.calendarEventLink && (
             <button
               type="button"
               className="text-button calendar-open-btn"
-              onClick={() => openGoogleCalendar(ticket.calendarEventLink)}
+              onClick={() => openGoogleCalendar(event.calendarEventLink)}
             >
               Open in Google Calendar ↗
             </button>
           )}
         </div>
-      ) : ticket.calendarEventStatus === "Failed" ? (
+      ) : event.calendarEventStatus === "Failed" ? (
         <div className="calendar-status-row">
           <span className="orange-dot" />
           Calendar sync failed
-          {ticket.calendarEventError && (
-            <span className="ai-insight-detail">({ticket.calendarEventError})</span>
+          {event.calendarEventError && (
+            <span className="ai-insight-detail">({event.calendarEventError})</span>
           )}
         </div>
       ) : (
@@ -2608,8 +2738,8 @@ function showAlerts() {
           Not yet synced to calendar
         </div>
       )}
-    </>
-  )}
+    </div>
+  ))}
   {ticket.suggestedResponse && (
     <div className="ai-suggested-reply-preview">
       <span className="ai-insight-label">AI suggested reply</span>

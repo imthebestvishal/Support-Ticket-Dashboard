@@ -114,49 +114,74 @@ export function analyzeTicket(message = "") {
 
 
 
-export async function extractDeadline(message = "") {
+// Calendar-relevant event types an AI-analyzed email/ticket can surface.
+// "Deadline" is kept first so it stays the default/primary event type
+// whenever both a deadline and other event types are detected.
+const ALLOWED_CALENDAR_EVENT_TYPES = [
+  "Deadline",
+  "Meeting",
+  "Appointment",
+  "Follow-up",
+  "Reminder",
+  "Callback",
+];
 
+/*
+ * Analyzes a ticket's text for EVERY calendar-relevant event the AI can
+ * find, not only deadlines: meetings, appointments, follow-ups, reminders,
+ * and promised callbacks/customer commitments.
+ *
+ * Returns: { events: [{ type, title, dateTime, reason }] }
+ * `dateTime` is a Date instance (or null if the model returned an
+ * unparsable date, in which case the event is dropped since a calendar
+ * event cannot be created without a valid date).
+ */
+export async function extractCalendarEvents(message = "") {
   try {
-
     const genAI = new GoogleGenerativeAI(
       process.env.GEMINI_API_KEY
     );
 
     const model = genAI.getGenerativeModel({
-      model: "gemini-3.6-flash",
+      model: "gemini-2.5-flash",
     });
 
-
     const result = await model.generateContent(`
-You are a support ticket deadline detector.
+You are a support ticket calendar-event detector.
 
-Analyze this customer email:
+Analyze this customer email and find EVERY date/time-bound item worth
+scheduling on a calendar - not only deadlines.
 
+Email:
 ${message}
 
-Return ONLY valid JSON.
-
-Format:
+Return ONLY valid JSON in exactly this format:
 
 {
- "hasDeadline": true or false,
- "deadline": "ISO date string or null",
- "reason": "why this deadline exists"
+  "events": [
+    {
+      "type": "Deadline",
+      "title": "Short label for the event",
+      "dateTime": "ISO date-time string",
+      "reason": "Why this event exists / what happens"
+    }
+  ]
 }
 
 Rules:
-- Detect dates mentioned by customer.
-- Detect phrases like:
-  "before Friday"
-  "by tomorrow"
-  "within 2 days"
-  "ASAP"
-  "urgent"
-- If no deadline exists return:
+- "type" must be exactly one of: Deadline, Meeting, Appointment, Follow-up, Reminder, Callback.
+  - Deadline: a due date/time the customer or team must meet (e.g. "by Friday", "within 2 days", "ASAP", "urgent").
+  - Meeting: a scheduled meeting or call between the customer and the team.
+  - Appointment: a booked appointment or scheduled visit.
+  - Follow-up: a promised follow-up on the ticket (e.g. "we'll check back in 3 days").
+  - Reminder: something that needs a reminder but isn't a hard deadline.
+  - Callback: a promised callback or customer commitment to reach out (e.g. "I'll call you back tomorrow at 3pm").
+- Only include an event if a specific date/time (or a clearly resolvable relative date/time, e.g. "tomorrow at 3pm", "next Monday") is mentioned or implied.
+- Resolve relative dates using the email's own context; if no year/date context is available, assume the near future.
+- Do not invent events that are not supported by the email content.
+- If there are no calendar-worthy events, return:
 {
- "hasDeadline": false,
- "deadline": null,
- "reason": ""
+  "events": []
 }
 `);
 
@@ -167,45 +192,70 @@ Rules:
       .replace(/```/g, "")
       .trim();
 
-
     const ai = JSON.parse(clean);
 
+    const rawEvents = Array.isArray(ai.events) ? ai.events : [];
 
-    return {
-      deadline: ai.deadline
-        ? new Date(ai.deadline)
-        : null,
+    const events = rawEvents
+      .map((event) => {
+        const type = ALLOWED_CALENDAR_EVENT_TYPES.includes(event?.type)
+          ? event.type
+          : null;
 
-      deadlineReason:
-        ai.reason || "",
+        const dateTime = event?.dateTime ? new Date(event.dateTime) : null;
 
-      deadlineStatus:
-        ai.deadline
-          ? "Upcoming"
-          : "None"
-    };
+        if (!type || !dateTime || Number.isNaN(dateTime.getTime())) {
+          return null;
+        }
 
+        return {
+          type,
+          title: event.title || "",
+          dateTime,
+          reason: event.reason || "",
+        };
+      })
+      .filter(Boolean);
 
-  } catch(error) {
+    return { events };
+  } catch (error) {
+    console.error("Calendar event AI error:", error);
 
-    console.error(
-      "Deadline AI error:",
-      error
-    );
-
-    return {
-      deadline:null,
-      deadlineReason:"",
-      deadlineStatus:"None"
-    };
-
+    return { events: [] };
   }
+}
+
+/*
+ * Backward-compatible deadline-only helper, kept for callers (like the
+ * manual "create deadline" endpoint) that only care about a single
+ * deadline. Internally reuses extractCalendarEvents so the underlying
+ * detection logic has one implementation.
+ */
+export async function extractDeadline(message = "") {
+  const { events } = await extractCalendarEvents(message);
+
+  const deadlineEvent = events.find((event) => event.type === "Deadline");
+
+  if (!deadlineEvent) {
+    return {
+      deadline: null,
+      deadlineReason: "",
+      deadlineStatus: "None",
+    };
+  }
+
+  return {
+    deadline: deadlineEvent.dateTime,
+    deadlineReason: deadlineEvent.reason,
+    deadlineStatus: "Upcoming",
+  };
 }
 
 export {
   ALLOWED_CATEGORIES,
   ALLOWED_PRIORITIES,
-  ALLOWED_SENTIMENTS
+  ALLOWED_SENTIMENTS,
+  ALLOWED_CALENDAR_EVENT_TYPES,
 };
 
 

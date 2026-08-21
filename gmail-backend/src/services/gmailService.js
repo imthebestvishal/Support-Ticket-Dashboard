@@ -1,8 +1,8 @@
 import { google } from "googleapis";
 import { User } from "../models/user.js";
 import { Message } from "../models/message.js";
-import { extractDeadline } from "./ticketIntelligenceService.js";
-import { createCalendarDeadline } from "./calendarService.js";
+import { extractCalendarEvents } from "./ticketIntelligenceService.js";
+import { createCalendarEvent } from "./calendarService.js";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
@@ -302,49 +302,69 @@ export async function fetchAndAnalyzeMessages(userId) {
         `AI result: ${JSON.stringify(analysis)}`
       );
 
-      const deadlineAI = await extractDeadline(
+      // Analyze the ticket for EVERY calendar-worthy event: deadlines,
+      // meetings, appointments, follow-ups, reminders, and promised
+      // callbacks/customer commitments - not only deadlines.
+      const calendarAI = await extractCalendarEvents(
         `${subject || ""} ${body || ""}`
       );
 
       console.log(
-        "AI Deadline Result:",
-        deadlineAI
+        "AI Calendar Events Result:",
+        calendarAI
       );
 
-      let calendarResult = null;
+      // Single source of calendar creation: every detected event is
+      // synced here, once, via createCalendarEvent. No other code path
+      // should create calendar events for a freshly fetched Gmail message.
+      const calendarEventRecords = [];
 
-      if (deadlineAI.deadline) {
-
-        calendarResult = await createCalendarDeadline({
-
-          accessToken:
-            user.accessToken,
-
-          refreshToken:
-            user.refreshToken,
-
-          subject,
-
-          deadline:
-            deadlineAI.deadline,
-
-          reason:
-            deadlineAI.deadlineReason,
-
+      for (const detectedEvent of calendarAI.events) {
+        const result = await createCalendarEvent({
+          accessToken: user.accessToken,
+          refreshToken: user.refreshToken,
+          subject: detectedEvent.title || subject,
+          dateTime: detectedEvent.dateTime,
+          reason: detectedEvent.reason,
+          type: detectedEvent.type,
         });
 
-        if (calendarResult.success) {
+        if (result.success) {
           console.log(
-            "Google Calendar deadline created:",
-            calendarResult.id
+            `Google Calendar ${detectedEvent.type} created:`,
+            result.id
           );
         } else {
           console.error(
-            "Google Calendar deadline failed:",
-            calendarResult.error
+            `Google Calendar ${detectedEvent.type} failed:`,
+            result.error
           );
         }
+
+        calendarEventRecords.push({
+          type: detectedEvent.type,
+          title: detectedEvent.title || "",
+          dateTime: detectedEvent.dateTime,
+          reason: detectedEvent.reason || "",
+          calendarEventId: result.success ? result.id : null,
+          calendarEventLink: result.success ? result.htmlLink : null,
+          calendarEventStatus: result.status,
+          calendarEventError: result.success ? "" : result.error || "",
+          calendarEventCreatedAt: result.success ? new Date() : null,
+        });
       }
+
+      // Backward-compatible deadline fields, derived from any
+      // Deadline-type event so the existing Deadline Monitor keeps working.
+      const deadlineEvent = calendarEventRecords.find(
+        (event) => event.type === "Deadline"
+      );
+
+      // Primary calendar event shown at the ticket level: prefer the
+      // Deadline event (existing behavior), otherwise fall back to the
+      // first detected event of any type.
+      const primaryEvent =
+        deadlineEvent || calendarEventRecords[0] || null;
 
       const savedMessage =
         await Message.findOneAndUpdate(
@@ -381,28 +401,29 @@ export async function fetchAndAnalyzeMessages(userId) {
               analysis.isTicket,
 
             deadline:
-              deadlineAI.deadline,
+              deadlineEvent ? deadlineEvent.dateTime : null,
 
             deadlineReason:
-              deadlineAI.deadlineReason,
+              deadlineEvent ? deadlineEvent.reason : "",
 
             deadlineStatus:
-              deadlineAI.deadlineStatus,
+              deadlineEvent ? "Upcoming" : "None",
 
-            ...(calendarResult
+            calendarEvents: calendarEventRecords,
+
+            ...(primaryEvent
               ? {
-                  calendarEventId:
-                    calendarResult.success ? calendarResult.id : null,
-                  calendarEventLink:
-                    calendarResult.success ? calendarResult.htmlLink : null,
-                  calendarEventStatus:
-                    calendarResult.status,
-                  calendarEventError:
-                    calendarResult.success ? "" : calendarResult.error || "",
-                  calendarEventCreatedAt:
-                    calendarResult.success ? new Date() : null,
+                  calendarEventId: primaryEvent.calendarEventId,
+                  calendarEventLink: primaryEvent.calendarEventLink,
+                  calendarEventStatus: primaryEvent.calendarEventStatus,
+                  calendarEventType: primaryEvent.type,
+                  calendarEventError: primaryEvent.calendarEventError,
+                  calendarEventCreatedAt: primaryEvent.calendarEventCreatedAt,
                 }
-              : {}),
+              : {
+                  calendarEventStatus: "None",
+                  calendarEventType: "None",
+                }),
 
             status: "Open",
           },

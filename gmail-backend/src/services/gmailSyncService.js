@@ -16,10 +16,12 @@ export async function startGmailAutoSync(){
         try{
 
             const users = await User.find({
+                googleId: {$exists:true, $ne:null},
                 accessToken: {$exists:true, $ne:""},
-                refreshToken: {$exists:true, $ne:""},
-                email: {$regex:"@gmail.com$"}
-            });
+                refreshToken: {$exists:true, $ne:""}
+            }).sort({
+                updatedAt: -1
+            }).limit(1);
 
 
             for(const user of users){
@@ -49,6 +51,7 @@ export async function startGmailAutoSync(){
 
     }, 60 * 1000);
 }
+
 
 
 
