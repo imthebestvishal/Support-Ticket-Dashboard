@@ -4,6 +4,7 @@ import {
   createCalendarDeadline,
 } from "../services/calendarService.js";
 import express from "express";
+import crypto from "crypto";
 import mongoose from "mongoose";
 import { User } from "../models/user.js";
 import { Message } from "../models/message.js";
@@ -16,15 +17,59 @@ import { askAssistant } from "../services/assistantService.js";
 
 const router = express.Router();
 
+function getBearerUserId(req) {
+  const header = req.get("authorization") || "";
+  const token = header.startsWith("Bearer ")
+    ? header.slice("Bearer ".length)
+    : "";
+
+  if (!token || !process.env.SESSION_SECRET) {
+    return "";
+  }
+
+  const [payload, signature] = token.split(".");
+
+  if (!payload || !signature) {
+    return "";
+  }
+
+  const expected = crypto
+    .createHmac("sha256", process.env.SESSION_SECRET)
+    .update(payload)
+    .digest("base64url");
+
+  if (signature !== expected) {
+    return "";
+  }
+
+  try {
+    const parsed = JSON.parse(
+      Buffer.from(payload, "base64url").toString("utf8"),
+    );
+
+    if (!parsed.userId || Number(parsed.exp || 0) < Date.now()) {
+      return "";
+    }
+
+    return parsed.userId;
+  } catch {
+    return "";
+  }
+}
+
 const requireAuth = async (req, res, next) => {
   try {
-    if (!req.session?.userId) {
+    const userId =
+      req.session?.userId ||
+      getBearerUserId(req);
+
+    if (!userId) {
       return res.status(401).send({
         error: "Not authenticated",
       });
     }
 
-    const user = await User.findById(req.session.userId);
+    const user = await User.findById(userId);
 
     if (!user) {
       return res.status(401).send({

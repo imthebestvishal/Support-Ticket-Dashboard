@@ -1,8 +1,63 @@
 import express from "express";
+import crypto from "crypto";
 import { google } from "googleapis";
 import { User } from "../models/user.js";
 
 const router = express.Router();
+
+function createAuthToken(userId) {
+  const payload = Buffer.from(
+    JSON.stringify({
+      userId,
+      exp: Date.now() + 24 * 60 * 60 * 1000,
+    }),
+  ).toString("base64url");
+
+  const signature = crypto
+    .createHmac("sha256", process.env.SESSION_SECRET || "")
+    .update(payload)
+    .digest("base64url");
+
+  return `${payload}.${signature}`;
+}
+
+function frontendUrl() {
+  return (process.env.FRONTEND_URL || "http://localhost:5173")
+    .replace(/\/+$/, "");
+}
+
+function dashboardRedirectUrl(baseUrl = frontendUrl()) {
+  const cleanBase = String(baseUrl || frontendUrl()).replace(/\/+$/, "");
+
+  return `${cleanBase}/#/dashboard`;
+}
+
+function isAllowedRedirect(value) {
+  if (!value || typeof value !== "string") {
+    return false;
+  }
+
+  try {
+    const redirect = new URL(value);
+    const configuredFrontend = new URL(frontendUrl());
+
+    return (
+      redirect.origin === configuredFrontend.origin ||
+      redirect.origin === "http://localhost:5173" ||
+      redirect.origin === "http://127.0.0.1:5173"
+    );
+  } catch {
+    return false;
+  }
+}
+
+function appendHashQuery(url, params) {
+  const [beforeHash, hash = ""] = url.split("#");
+  const hashPath = hash || "/dashboard";
+  const separator = hashPath.includes("?") ? "&" : "?";
+
+  return `${beforeHash}#${hashPath}${separator}${params.toString()}`;
+}
 
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
@@ -13,10 +68,7 @@ const oauth2Client = new google.auth.OAuth2(
 router.get("/google", (req, res) => {
   const redirectUrl = req.query.redirect;
 
-  if (
-    redirectUrl &&
-    redirectUrl.startsWith("http://localhost")
-  ) {
+  if (isAllowedRedirect(redirectUrl)) {
     req.session.redirectAfterAuth = redirectUrl;
   }
 
@@ -116,8 +168,7 @@ router.get("/google/callback", async (req, res) => {
      */
     const redirectTarget =
       req.session.redirectAfterAuth ||
-      process.env.FRONTEND_URL ||
-      "/";
+      dashboardRedirectUrl();
 
     /*
      * Store authenticated user in session.
@@ -155,7 +206,13 @@ router.get("/google/callback", async (req, res) => {
         "Session saved successfully",
       );
 
-      res.redirect(redirectTarget);
+      const params = new URLSearchParams({
+        gmail_connected: "true",
+        email,
+        auth_token: createAuthToken(user._id.toString()),
+      });
+
+      res.redirect(appendHashQuery(redirectTarget, params));
     });
   } catch (error) {
     console.error(

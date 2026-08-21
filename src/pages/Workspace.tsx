@@ -605,10 +605,14 @@ function Workspace() {
     const params = new URLSearchParams(hashQuery);
     const authToken = params.get("auth_token");
     const gmailEmail = params.get("email");
+    const gmailConnected = params.get("gmail_connected");
 
-    if (authToken) {
-      localStorage.setItem(GMAIL_AUTH_TOKEN_KEY, authToken);
+    if (authToken || gmailConnected === "true") {
       localStorage.setItem("gmailConnected", "true");
+
+      if (authToken) {
+        localStorage.setItem(GMAIL_AUTH_TOKEN_KEY, authToken);
+      }
 
       if (gmailEmail) {
         localStorage.setItem("gmailEmail", gmailEmail);
