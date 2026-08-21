@@ -1,5 +1,4 @@
 import React, { useRef, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 
 interface ScrollShowcaseProps {
   totalFrames: number;
@@ -7,10 +6,9 @@ interface ScrollShowcaseProps {
 }
 
 export default function ScrollShowcase({ totalFrames, imagePath }: ScrollShowcaseProps) {
-  const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const titleRef = useRef<HTMLDivElement | null>(null);
+  const overlayRef = useRef<HTMLDivElement | null>(null);
   
   const [images, setImages] = useState<HTMLImageElement[]>([]);
   const [preloadingProgress, setPreloadingProgress] = useState(0);
@@ -158,28 +156,12 @@ export default function ScrollShowcase({ totalFrames, imagePath }: ScrollShowcas
       // Lock overlays and fades directly to the user's scrollbar progress
       const renderedProgress = anim.progress;
 
-      // A. Update Floating Left Brand Title Opacity smoothly based on rendered frame
-      if (titleRef.current) {
-        const titleOpacity = renderedProgress < 0.12 ? 1 - (renderedProgress / 0.12) : 0;
-        titleRef.current.style.opacity = String(titleOpacity);
-        titleRef.current.style.visibility = titleOpacity > 0.02 ? "visible" : "hidden";
-      }
-
-      // B. Update canvas container opacity based on rendered frame
-      const canvasOpacity = renderedProgress > 0.90 ? 1 - ((renderedProgress - 0.90) / 0.10) : 1;
-      const canvasSide = canvas.parentElement?.parentElement; // .scroll-showcase-canvas-side
-      if (canvasSide) {
-        canvasSide.style.opacity = String(canvasOpacity);
-      }
-
-      // C. Update Signup Card visibility based on rendered frame
-      const signupCard = containerRef.current?.querySelector(".scroll-showcase-signup-card") as HTMLDivElement | null;
-      if (signupCard) {
-        if (renderedProgress >= 0.90) {
-          signupCard.classList.add("active");
-        } else {
-          signupCard.classList.remove("active");
-        }
+      // Fade every non-sequence overlay away as soon as the scroll animation begins.
+      if (overlayRef.current) {
+        const overlayOpacity = renderedProgress < 0.10 ? 1 - (renderedProgress / 0.10) : 0;
+        overlayRef.current.style.opacity = String(overlayOpacity);
+        overlayRef.current.style.visibility = overlayOpacity > 0.02 ? "visible" : "hidden";
+        overlayRef.current.style.pointerEvents = overlayOpacity > 0.65 ? "auto" : "none";
       }
 
       animId = requestAnimationFrame(renderLoop);
@@ -212,39 +194,56 @@ export default function ScrollShowcase({ totalFrames, imagePath }: ScrollShowcas
     <div ref={containerRef} className="scroll-showcase-container">
       <div className="scroll-showcase-sticky">
         <div className="scroll-showcase-split">
-          
-          {/* Floating Left Brand Title (fades out as scroll starts) */}
-          <div ref={titleRef} className="scroll-showcase-left-title">
-            <h1>
-              <span className="title-base">Support</span>
-              <br />
-              <span className="title-accent">Hub</span>
-            </h1>
+          <div ref={overlayRef} className="scroll-showcase-intro-overlay" aria-hidden="true">
+            <div className="scroll-showcase-hero-copy">
+              <h1>
+                <span>Senti</span>
+                <strong>Mail</strong>
+              </h1>
+              <p>
+                All your support tickets, emails, and conversations in one place.
+                Stay organized, respond faster, and deliver exceptional support.
+              </p>
+            </div>
+
+            <div className="scroll-showcase-card floating-card mail-card">
+              <span className="scroll-showcase-card-icon mail-icon">M</span>
+              <div>
+                <strong>Senti Mail</strong>
+                <p>All emails & tickets in one unified view.</p>
+              </div>
+            </div>
+
+            <div className="scroll-showcase-card floating-card insights-card">
+              <span className="scroll-showcase-card-icon insights-icon">I</span>
+              <div>
+                <strong>Smart Insights</strong>
+                <p>Get AI-powered insights and ticket summaries.</p>
+              </div>
+            </div>
+
+            <div className="scroll-showcase-card floating-card response-card">
+              <span className="scroll-showcase-card-icon response-icon">F</span>
+              <div>
+                <strong>Faster Response</strong>
+                <p>Automate workflows and reply in seconds.</p>
+              </div>
+            </div>
+
+            <div className="scroll-showcase-card floating-card deadline-card">
+              <span className="scroll-showcase-card-icon deadline-icon">D</span>
+              <div>
+                <strong>Deadline Alerts</strong>
+                <p>Spot time-sensitive emails before follow-ups slip.</p>
+              </div>
+            </div>
+
+            <span className="scroll-showcase-dots dots-left" />
+            <span className="scroll-showcase-dots dots-right" />
+            <span className="scroll-showcase-connector connector-top" />
+            <span className="scroll-showcase-connector connector-right" />
           </div>
 
-          {/* Step 4: Centered Brand Signup Card overlay at the very end of scroll */}
-          <div className="scroll-showcase-signup-card">
-            <p className="landing-kicker">AI email operations</p>
-            <h1 className="hero-title">
-              <span className="title-base">Support</span>{" "}
-              <span className="title-accent">Hub</span>
-            </h1>
-            <div className="hero-divider-bar" aria-hidden="true" />
-            <h2 className="hero-subtitle" style={{ fontSize: "28px" }}>
-              One stop solution for{" "}
-              <span className="highlight-green">Real Time Email Analysis</span>
-            </h2>
-            <p className="hero-description" style={{ fontSize: "14px", lineHeight: "1.6", maxWidth: "100%", margin: "0 auto 28px" }}>
-              A minimal AI-powered support workspace that analyzes customer emails,
-              prioritizes urgency, drafts better replies, and keeps follow-up work visible.
-            </p>
-            <button onClick={() => navigate("/auth?mode=signup")} className="hero-cta-button" style={{ display: "inline-flex", marginTop: "0" }}>
-              <span>Sign Up</span>
-              <span className="arrow-icon" aria-hidden="true">→</span>
-            </button>
-          </div>
-
-          {/* Right Sticky Canvas Render */}
           <div className="scroll-showcase-canvas-side">
             <div className="canvas-wrapper">
               <canvas ref={canvasRef} />

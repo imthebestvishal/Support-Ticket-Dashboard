@@ -24,9 +24,9 @@ const featureHighlights = [
 
 const helpCenterFaqs = [
   {
-    question: "How does Sentimail integrate with Gmail?",
+    question: "How does SentiMail integrate with Gmail?",
     answer:
-      "Sentimail connects seamlessly via Google OAuth 2.0 and official Gmail APIs to analyze support emails, categorize them automatically into 6 priority types, and generate AI-driven summaries without storing sensitive credentials.",
+      "SentiMail connects seamlessly via Google OAuth 2.0 and official Gmail APIs to analyze support emails, categorize them automatically into 6 priority types, and generate AI-driven summaries without storing sensitive credentials.",
   },
   {
     question: "How does AI Email Categorization work?",
@@ -64,11 +64,56 @@ const projectHighlights = [
   },
 ];
 
+type FeatureIconName = "mail" | "analytics" | "assistant" | "alarm";
+
+function FeatureIcon({ name }: { name: FeatureIconName }) {
+  const paths: Record<FeatureIconName, JSX.Element> = {
+    mail: (
+      <>
+        <path d="M4 7.5h16v10.2H4z" />
+        <path d="m4.7 8.2 7.3 5.5 7.3-5.5" />
+      </>
+    ),
+    analytics: (
+      <>
+        <path d="M5.5 18V9.5" />
+        <path d="M12 18V6" />
+        <path d="M18.5 18v-5.5" />
+        <path d="M4 18h16" />
+      </>
+    ),
+    assistant: (
+      <>
+        <path d="M8 10.5h8" />
+        <path d="M9.5 15h5" />
+        <path d="M7 6.5h10a3 3 0 0 1 3 3v4.8a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V9.5a3 3 0 0 1 3-3z" />
+        <path d="M12 6.5V3.8" />
+        <path d="M8.5 3.8h7" />
+      </>
+    ),
+    alarm: (
+      <>
+        <path d="M7.5 4.5 4.8 7.2" />
+        <path d="m16.5 4.5 2.7 2.7" />
+        <path d="M12 7a6 6 0 1 1 0 12 6 6 0 0 1 0-12z" />
+        <path d="M12 10.2v3.5l2.4 1.5" />
+      </>
+    ),
+  };
+
+  return (
+    <span className={`feature-icon-badge feature-icon-${name}`} aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none">
+        {paths[name]}
+      </svg>
+    </span>
+  );
+}
+
 function Logo() {
   return (
-    <Link to="/" className="landing-logo senti-mail-logo" aria-label="sentiMail home">
-      <strong>senti</strong>
-      <span>Mail</span>
+    <Link to="/" className="landing-logo" aria-label="SentiMail home">
+      <img src="/assets/brand_logo.png" alt="SentiMail" className="landing-logo-image" />
     </Link>
   );
 }
@@ -194,7 +239,7 @@ export default function Landing() {
         <div className="landing-section-heading scroll-reveal">
           <h2>The next support actions stay visible.</h2>
           <p>
-            Sentimail turns Gmail conversations into prioritized support tickets with AI summaries,
+            SentiMail turns Gmail conversations into prioritized support tickets with AI summaries,
             reply assistance, deadline awareness, and team-ready follow-up signals.
           </p>
         </div>
@@ -219,13 +264,13 @@ export default function Landing() {
             <p className="eyebrow">FEATURES & CAPABILITIES</p>
             <h2>Intelligent Support Operations</h2>
             <p className="subtitle">
-              Discover how Sentimail automates customer email triage, priority categorization, and task reminders.
+              Discover how SentiMail automates customer email triage, priority categorization, and task reminders.
             </p>
           </div>
 
           <div className="features-deep-grid scroll-reveal">
             <div className="deep-feature-card">
-              <div className="feature-icon-badge">📩</div>
+              <FeatureIcon name="mail" />
               <h3>Gmail AI Auto-Categorization</h3>
               <p>
                 Automatically classifies incoming messages into 6 distinct categories: Social, Financial, Technical, Promotions, Feature Requests, and General support.
@@ -233,7 +278,7 @@ export default function Landing() {
             </div>
 
             <div className="deep-feature-card">
-              <div className="feature-icon-badge">📊</div>
+              <FeatureIcon name="analytics" />
               <h3>Live Support Analytics</h3>
               <p>
                 Real-time total tickets count, resolution rates, high-priority alert cards, and dynamic category breakdown charts with zero hardcoding.
@@ -241,7 +286,7 @@ export default function Landing() {
             </div>
 
             <div className="deep-feature-card">
-              <div className="feature-icon-badge">🤖</div>
+              <FeatureIcon name="assistant" />
               <h3>AI Chat Assistant</h3>
               <p>
                 Interact with your support dataset using natural language. Query high-priority tickets, get instant summaries, and auto-draft customer responses.
@@ -249,7 +294,7 @@ export default function Landing() {
             </div>
 
             <div className="deep-feature-card">
-              <div className="feature-icon-badge">⏰</div>
+              <FeatureIcon name="alarm" />
               <h3>Deadline & Volume Alarms</h3>
               <p>
                 Receive automated alerts when time-sensitive customer tickets near deadline or when incoming email volume spikes unexpectedly.
@@ -263,7 +308,7 @@ export default function Landing() {
       <section id="help-center" className="landing-section-block landing-tab-view landing-help-view">
         <div className="tab-hero-heading scroll-reveal">
           <p className="eyebrow">HELP CENTER & FAQ</p>
-          <h2>How Sentimail Works</h2>
+          <h2>How SentiMail Works</h2>
           <p className="subtitle">
             Everything you need to know about setting up Gmail integration, managing tickets, and AI data security.
           </p>
@@ -285,7 +330,7 @@ export default function Landing() {
           <p className="eyebrow">ABOUT SENTIMAIL</p>
           <h2>Empowering Support Teams with AI</h2>
           <p className="subtitle">
-            Sentimail is an intelligent support dashboard built to streamline email triage, prioritize customer urgency, and eliminate manual queue management.
+            SentiMail is an intelligent support dashboard built to streamline email triage, prioritize customer urgency, and eliminate manual queue management.
           </p>
         </div>
 
@@ -303,7 +348,7 @@ export default function Landing() {
       <section className="landing-closing scroll-reveal">
         <h2>Built for scanning, triage, and action.</h2>
         <button onClick={() => navigate("/auth?mode=signup")} className="hero-cta-button">
-          <span>Start with Sentimail</span>
+          <span>Start with SentiMail</span>
           <span className="arrow-icon" aria-hidden="true">
             →
           </span>

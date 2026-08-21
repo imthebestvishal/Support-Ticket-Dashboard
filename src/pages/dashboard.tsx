@@ -371,7 +371,7 @@ export default function Dashboard() {
       <main className="dashboard-main">
         <div className="dashboard-header">
           <div>
-            <h1>Sentimail</h1>
+            <h1>SentiMail</h1>
 
             <p>
               Manage customer support tickets with
