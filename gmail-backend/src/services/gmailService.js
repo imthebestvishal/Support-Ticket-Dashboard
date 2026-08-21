@@ -30,8 +30,6 @@ Return ONLY valid JSON in exactly this format:
   "sentiment": "Neutral",
   "suggestedResponse": "Professional response to the customer",
   "isTicket": true
-}
-
 Rules:
 
 category must be exactly one of:
@@ -124,6 +122,42 @@ Keep summary short.
       isTicket: true,
     };
   }
+}
+
+function fallbackAnalyzeMessage(subject = "", body = "", sender = "") {
+  const text = `${subject} ${body} ${sender}`.toLowerCase();
+  const isSecurity =
+    /(login|sign-in|password|security|verification|2fa|otp)/i.test(text);
+  const isBilling =
+    /(invoice|payment|billing|transaction|refund|charge|credit)/i.test(text);
+  const isTechnical =
+    /(error|bug|issue|access|unable|failed|api|backend|frontend|deploy)/i.test(
+      text
+    );
+  const isAccount =
+    /(account|profile|permission|invite|invitation)/i.test(text);
+  const urgent =
+    /(urgent|asap|immediately|critical|blocked|closing in|deadline)/i.test(
+      text
+    );
+
+  return {
+    category: isSecurity || isAccount
+      ? "Account"
+      : isBilling
+      ? "Billing"
+      : isTechnical
+      ? "Technical"
+      : "Other",
+    priority: urgent ? "Urgent" : isSecurity || isTechnical ? "Medium" : "Low",
+    summary: subject || body.slice(0, 160) || "New Gmail message",
+    sentiment: /(angry|frustrated|failed|unable|blocked|problem)/i.test(text)
+      ? "Negative"
+      : "Neutral",
+    suggestedResponse:
+      "Thank you for the update. I will review the details and follow up with the next step.",
+    isTicket: true,
+  };
 }
 
 /*
@@ -247,15 +281,15 @@ export async function fetchAndAnalyzeMessages(userId) {
   const listResponse =
     await gmail.users.messages.list({
       userId: "me",
-      q: "is:unread newer_than:1d",
-      maxResults: 3,
+      q: "in:inbox newer_than:7d -in:trash -in:spam",
+      maxResults: 25,
     });
 
   const gmailMessages =
     listResponse.data.messages || [];
 
   console.log(
-    `Gmail returned ${gmailMessages.length} unread messages`
+    `Gmail returned ${gmailMessages.length} recent inbox messages`
   );
 
   const results = [];
@@ -290,12 +324,23 @@ export async function fetchAndAnalyzeMessages(userId) {
         `Analyzing email: ${subject}`
       );
 
-      const analysis =
-        await analyzeMessage(
-          subject,
-          body,
-          sender
+      let analysis;
+
+      try {
+        analysis =
+          await analyzeMessage(
+            subject,
+            body,
+            sender
+          );
+      } catch (error) {
+        console.error(
+          `AI analysis failed for Gmail message ${gmailMessage.id}; using local fallback:`,
+          error.message
         );
+
+        analysis = fallbackAnalyzeMessage(subject, body, sender);
+      }
 
       console.log(
         `AI result: ${JSON.stringify(analysis)}`

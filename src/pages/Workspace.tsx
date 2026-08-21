@@ -763,9 +763,13 @@ function Workspace() {
     if (
       gmailStatus.startsWith("Connected")
     ) {
-      loadGmailMessages();
+      if (autoSyncEnabled) {
+        syncGmailInBackground();
+      } else {
+        loadGmailMessages();
+      }
     }
-  }, [gmailStatus]);
+  }, [gmailStatus, autoSyncEnabled]);
 
   useEffect(() => {
     if (!gmailStatus.startsWith("Connected") || !autoSyncEnabled) {
@@ -773,7 +777,7 @@ function Workspace() {
     }
 
     const intervalId = window.setInterval(() => {
-      loadGmailMessages();
+      syncGmailInBackground();
     }, 45000);
 
     return () => window.clearInterval(intervalId);
@@ -1642,6 +1646,43 @@ function Workspace() {
       );
     } finally {
       setGmailLoading(false);
+    }
+  }
+
+  async function syncGmailInBackground() {
+    try {
+      const response = await fetch(
+        `${API}/api/messages/fetch`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            ...getGmailAuthHeaders(),
+          },
+        }
+      );
+
+      const text = await response.text();
+      const data = JSON.parse(text);
+
+      if (!response.ok) {
+        throw new Error(data.error || "Gmail sync failed");
+      }
+
+      await loadGmailMessages();
+      setLastSyncTime(new Date());
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Gmail sync failed";
+
+      setSyncErrors((previous) => [
+        {
+          message,
+          at: new Date(),
+        },
+        ...previous,
+      ].slice(0, 5));
     }
   }
 
