@@ -2,16 +2,13 @@ import { google } from "googleapis";
 import { User } from "../models/user.js";
 import { Message } from "../models/message.js";
 import { extractCalendarEvents } from "./ticketIntelligenceService.js";
-
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+import {
+  callProviderStackJson,
+  callProviderStackText,
+} from "./aiProviderService.js";
 
 async function analyzeMessage(subject, body, sender) {
-  if (!GEMINI_API_KEY) {
-    throw new Error("GEMINI_API_KEY is not configured");
-  }
-
-  const prompt = `
-You are an AI support-ticket analyzer.
+  const prompt = `You are an AI support-ticket analyzer for SentiMail.
 
 Analyze the following email and determine whether it should become a support ticket.
 
@@ -28,9 +25,12 @@ Return ONLY valid JSON in exactly this format:
   "priority": "Medium",
   "summary": "Short summary of the customer's issue",
   "sentiment": "Neutral",
+  "emailType": "Support Request",
+  "emailTypeReason": "Why this type was selected",
+  "isActionable": true,
   "suggestedResponse": "Professional response to the customer",
   "isTicket": true
-Rules:
+}
 
 category must be exactly one of:
 Technical, Billing, Account, General, Other
@@ -41,87 +41,61 @@ Low, Medium, High, Urgent
 sentiment must be exactly one of:
 Positive, Neutral, Negative
 
+emailType must be a practical label based on the email's actual intent, such as:
+Access Request, Security Alert, Transaction Notice, Event Invitation, Job Update,
+Newsletter, Social Notification, Support Request, System Notification, Account Activity,
+Promotional Offer, Development Update, Other
+
 isTicket must be true if the email contains a request, problem,
 complaint, support question, account issue, billing issue,
 technical issue, or action that requires attention.
 
+Do not label low-value notifications as support tickets unless they need action.
 Keep summary short.
 `;
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+  const result = await callProviderStackJson(
+    [
+      {
+        role: "system",
+        content:
+          "Return only valid JSON. Analyze email intent, urgency, sentiment, and support actionability.",
       },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              {
-                text: prompt,
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.2,
-          responseMimeType: "application/json",
-        },
-      }),
+      {
+        role: "user",
+        content: prompt,
+      },
+    ],
+    {
+      temperature: 0.2,
     }
   );
 
-  if (!response.ok) {
-    const errorText = await response.text();
+  const parsed = result.json;
 
-    throw new Error(
-      `Gemini API error ${response.status}: ${errorText}`
-    );
-  }
-
-  const data = await response.json();
-
-  const text =
-    data?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-  if (!text) {
-    throw new Error("Gemini returned an empty response");
-  }
-
-  try {
-    const parsed = JSON.parse(text);
-
-    return {
-      category: parsed.category || "Other",
-      priority: parsed.priority || "Medium",
-      summary: parsed.summary || "No summary available",
-      sentiment: parsed.sentiment || "Neutral",
-      suggestedResponse:
-        parsed.suggestedResponse ||
-        "Thank you for contacting us. We will review your request and get back to you shortly.",
-      isTicket:
-        typeof parsed.isTicket === "boolean"
-          ? parsed.isTicket
-          : true,
-    };
-  } catch (error) {
-    console.error(
-      "Gemini returned invalid JSON:",
-      text
-    );
-
-    return {
-      category: "Other",
-      priority: "Medium",
-      summary: text.substring(0, 500),
-      sentiment: "Neutral",
-      suggestedResponse:
-        "Thank you for contacting us. We will review your request and get back to you shortly.",
-      isTicket: true,
-    };
-  }
+  return {
+    category: parsed.category || "Other",
+    priority: parsed.priority || "Medium",
+    summary: parsed.summary || "No summary available",
+    sentiment: parsed.sentiment || "Neutral",
+    emailType: parsed.emailType || parsed.category || "Other",
+    emailTypeReason: parsed.emailTypeReason || "",
+    isActionable:
+      typeof parsed.isActionable === "boolean"
+        ? parsed.isActionable
+        : true,
+    suggestedResponse:
+      parsed.suggestedResponse ||
+      "Thank you for contacting us. We will review your request and get back to you shortly.",
+    isTicket:
+      typeof parsed.isTicket === "boolean"
+        ? parsed.isTicket
+        : true,
+    aiProvider: result.provider,
+    aiSource: result.source,
+    aiModel: result.model,
+    providerError: result.providerError || "",
+  };
 }
 
 function fallbackAnalyzeMessage(subject = "", body = "", sender = "") {
@@ -154,6 +128,17 @@ function fallbackAnalyzeMessage(subject = "", body = "", sender = "") {
     sentiment: /(angry|frustrated|failed|unable|blocked|problem)/i.test(text)
       ? "Negative"
       : "Neutral",
+    emailType: isBilling
+      ? "Transaction Notice"
+      : isSecurity
+      ? "Security Alert"
+      : isAccount
+      ? "Account Activity"
+      : isTechnical
+      ? "Support Request"
+      : "Other",
+    emailTypeReason: "Detected by local fallback heuristics.",
+    isActionable: urgent || isSecurity || isTechnical || isAccount,
     suggestedResponse:
       "Thank you for the update. I will review the details and follow up with the next step.",
     isTicket: true,
@@ -417,6 +402,15 @@ export async function fetchAndAnalyzeMessages(userId) {
             sentiment:
               analysis.sentiment,
 
+            emailType:
+              analysis.emailType,
+
+            emailTypeReason:
+              analysis.emailTypeReason,
+
+            isActionable:
+              analysis.isActionable,
+
             suggestedResponse:
               analysis.suggestedResponse,
 
@@ -617,7 +611,7 @@ export async function sendGmailReply(userId, ticketOrMessage, replyText) {
 
 /*
 |--------------------------------------------------------------------------
-| Refine Support Reply with Gemini
+| Refine Support Reply with AI provider stack
 |--------------------------------------------------------------------------
 */
 
@@ -628,10 +622,6 @@ export async function refineSupportReply({
   customerMessage,
   kbSnippet,
 }) {
-  if (!GEMINI_API_KEY) {
-    throw new Error("GEMINI_API_KEY is not configured");
-  }
-
   let toneInstruction = "Improve and polish this support reply for clarity and helpfulness.";
   if (tone === "formal") {
     toneInstruction = "Rewrite this customer support email to be highly professional, formal, respectful, and polished.";
@@ -658,44 +648,31 @@ ${toneInstruction}
 Return ONLY the rewritten response text. Do not wrap in markdown quotes or code blocks.
 `;
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+  const result = await callProviderStackText(
+    [
+      {
+        role: "system",
+        content:
+          "You write concise, professional support email drafts. Return plain text only.",
       },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              {
-                text: prompt,
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.3,
-        },
-      }),
+      {
+        role: "user",
+        content: prompt,
+      },
+    ],
+    {
+      temperature: 0.3,
     }
   );
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Gemini API error ${response.status}: ${errorText}`);
-  }
-
-  const data = await response.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-  if (!text) {
-    throw new Error("Gemini returned an empty response");
-  }
-
-  return text.trim();
-}
+  return {
+    text: result.text,
+    source: result.source,
+    provider: result.provider,
+    model: result.model,
+    providerError: result.providerError || "",
+  };
+}
 
 
 

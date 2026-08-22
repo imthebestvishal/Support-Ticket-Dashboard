@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { callProviderStackJson } from "./aiProviderService.js";
 
 const ALLOWED_CATEGORIES = [
   "Technical",
@@ -307,15 +307,16 @@ function localCalendarEventFallback(message = "") {
  */
 export async function extractCalendarEvents(message = "") {
   try {
-    const genAI = new GoogleGenerativeAI(
-      process.env.GEMINI_API_KEY
-    );
-
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
-    });
-
-    const result = await model.generateContent(`
+    const result = await callProviderStackJson(
+      [
+        {
+          role: "system",
+          content:
+            "Return only valid JSON. Detect explicit date/time-bound calendar events from support emails.",
+        },
+        {
+          role: "user",
+          content: `
 You are a support ticket calendar-event detector.
 
 Analyze this customer email and find EVERY date/time-bound item worth
@@ -352,18 +353,15 @@ Rules:
 {
   "events": []
 }
-`);
+`,
+        },
+      ],
+      {
+        temperature: 0.1,
+      }
+    );
 
-    const text = result.response.text();
-
-    const clean = text
-      .replace(/```json/g, "")
-      .replace(/```/g, "")
-      .trim();
-
-    const ai = JSON.parse(clean);
-
-    const rawEvents = Array.isArray(ai.events) ? ai.events : [];
+    const rawEvents = Array.isArray(result.json.events) ? result.json.events : [];
 
     const events = rawEvents
       .map((event) => {

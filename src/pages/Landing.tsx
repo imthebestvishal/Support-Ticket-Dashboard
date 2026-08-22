@@ -48,7 +48,7 @@ const helpCenterFaqs = [
 const projectHighlights = [
   {
     title: "AI-Powered Triage",
-    desc: "Automated email classification and priority detection powered by Google Gemini AI.",
+    desc: "Automated email classification and priority detection powered by Groq AI.",
   },
   {
     title: "Real-Time Workspace",
@@ -60,7 +60,7 @@ const projectHighlights = [
   },
   {
     title: "Tech Stack",
-    desc: "React 18, TypeScript, Vite, Node.js, Express, MongoDB, Google OAuth 2.0 & Gemini API.",
+    desc: "React 18, TypeScript, Vite, Node.js, Express, MongoDB, Google OAuth 2.0 & Groq API.",
   },
 ];
 

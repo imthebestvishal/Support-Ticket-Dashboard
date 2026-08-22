@@ -746,7 +746,7 @@ export default function Dashboard() {
 
             <p className="ai-caption">
               Suggested reply generated automatically
-              by Gemini.
+              by Groq.
             </p>
           </section>
         </div>

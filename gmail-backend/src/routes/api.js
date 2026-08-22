@@ -229,11 +229,11 @@ router.get("/messages", requireAuth, async (req, res) => {
   }
 });
 
-// Fetch unread Gmail messages and analyze them with Gemini
+// Fetch unread Gmail messages and analyze them with AI
 //
 // NOTE: fetchAndAnalyzeMessages() (in gmailService.js) is the single
 // source of truth for both AI ticket analysis and calendar event
-// detection - it already analyzes every message with Gemini, detects
+// detection - it already analyzes every message with the provider stack, detects
 // every calendar-worthy event (deadlines, meetings, appointments,
 // follow-ups, reminders, callbacks), and persists them to the Message
 // document for reviewed Calendar creation from the UI.
@@ -468,7 +468,7 @@ router.put("/messages/:id/reply", requireAuth, async (req, res) => {
   }
 });
 
-// Refine ticket reply draft with AI (Gemini)
+// Refine ticket reply draft with AI
 router.post("/messages/:id/refine", requireAuth, async (req, res) => {
   try {
     const { tone, reply, kbSnippet } = req.body;
@@ -483,7 +483,7 @@ router.post("/messages/:id/refine", requireAuth, async (req, res) => {
     const currentReply =
       reply || message.editedReply || message.suggestedResponse || "";
 
-    const refinedText = await refineSupportReply({
+    const refined = await refineSupportReply({
       replyText: currentReply,
       tone: tone || "formal",
       subject: message.subject,
@@ -492,7 +492,11 @@ router.post("/messages/:id/refine", requireAuth, async (req, res) => {
     });
 
     res.send({
-      refinedReply: refinedText,
+      refinedReply: refined.text,
+      source: refined.source,
+      provider: refined.provider,
+      model: refined.model,
+      providerError: refined.providerError || "",
     });
   } catch (error) {
     console.error("Failed to refine reply with AI:", error);
@@ -602,7 +606,7 @@ router.post("/messages/:id/draft-reply", requireAuth, async (req, res) => {
       });
     }
 
-    const draft =
+    const baseDraft =
       message.suggestedResponse ||
       `Hello,
 
@@ -611,13 +615,40 @@ Thank you for contacting support. We have received your request and our team wil
 Regards,
 Support Team`;
 
+    let draft = baseDraft;
+    let source = "fallback";
+    let provider = "Local fallback";
+    let model = "local";
+    let providerError = "";
+
+    try {
+      const generated = await refineSupportReply({
+        replyText: baseDraft,
+        tone: "formal",
+        subject: message.subject,
+        customerMessage: message.body,
+      });
+
+      draft = generated.text;
+      source = generated.source;
+      provider = generated.provider;
+      model = generated.model;
+      providerError = generated.providerError || "";
+    } catch (providerFailure) {
+      providerError = providerFailure.providerError || providerFailure.message;
+      console.warn("AI draft provider failed; using local draft.", providerError);
+    }
+
     message.suggestedResponse = draft;
     await message.save();
 
     res.send({
       message,
       draft,
-      source: "fallback",
+      source,
+      provider,
+      model,
+      providerError,
     });
 
   } catch (error) {
@@ -784,8 +815,12 @@ router.post("/assistant/create-deadline", requireAuth, async (req,res)=>{
   }
 });
 
-router.get("/assistant/status", (_req, res) => {
-  res.send(getAssistantStatus());
+router.get("/assistant/status", async (req, res) => {
+  res.send(
+    await getAssistantStatus({
+      probe: req.query?.probe === "true",
+    })
+  );
 });
 
 router.get("/calendar/status", requireAuth, async (req, res) => {

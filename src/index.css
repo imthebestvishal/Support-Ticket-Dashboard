@@ -599,7 +599,7 @@ button:disabled {
 
 
 
-.reply-source-tag.is-agentrouter {
+.reply-source-tag.is-provider {
   background: rgba(89, 147, 69, 0.12);
   color: #3f7d32;
   border: 1px solid rgba(89, 147, 69, 0.22);
@@ -6421,7 +6421,7 @@ body.dark-theme .reply-draft-header span {
 
 
 
-body.dark-theme .reply-source-tag.is-agentrouter {
+body.dark-theme .reply-source-tag.is-provider {
   background: rgba(74, 222, 128, 0.12) !important;
   color: #4ade80 !important;
   border-color: rgba(74, 222, 128, 0.24) !important;

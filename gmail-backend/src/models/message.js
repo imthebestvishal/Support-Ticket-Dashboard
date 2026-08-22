@@ -58,6 +58,21 @@ const messageSchema = new mongoose.Schema(
       default: "Neutral",
     },
 
+    emailType: {
+      type: String,
+      default: "",
+    },
+
+    emailTypeReason: {
+      type: String,
+      default: "",
+    },
+
+    isActionable: {
+      type: Boolean,
+      default: true,
+    },
+
     suggestedResponse: {
       type: String,
       default: "",

@@ -542,8 +542,8 @@ function getAssistantSourceLabel(data: {
     configured?: boolean;
   };
 }) {
-  if (data.source === "agentrouter") {
-    return `AgentRouter · ${data.model || "configured model"}`;
+  if (data.source === "groq") {
+    return `Groq · ${data.model || "configured model"}`;
   }
 
   if (data.source === "openrouter") {
@@ -556,14 +556,14 @@ function getAssistantSourceLabel(data: {
 
   if (
     data.providerStatus?.configured === false ||
-    /not configured|missing|your-agent-router-token/i.test(
+    /not configured|missing|placeholder|api key/i.test(
       data.providerError || ""
     )
   ) {
-    return "Local fallback · missing AgentRouter token";
+    return "Local fallback · missing AI key";
   }
 
-  return "Local fallback · AgentRouter error";
+  return "Local fallback · AI provider error";
 }
 
 function SidebarLogo() {
@@ -1517,12 +1517,12 @@ function Workspace() {
         ...previous,
         [id]: {
           draft: data.draft || "",
-          source: data.source || "agentrouter",
+          source: data.source || "groq",
           loading: false,
           sending: false,
           error:
             data.source === "fallback" && data.providerError
-              ? `AgentRouter error: ${data.providerError}`
+              ? `AI provider error: ${data.providerError}`
               : "",
           success: "",
         },
@@ -3250,13 +3250,15 @@ function showAlerts() {
                                       className={`reply-source-tag ${
                                         replyState.source === "fallback"
                                           ? "is-fallback"
-                                          : "is-agentrouter"
+                                          : "is-provider"
                                       }`}
                                     >
                                       {replyState.source === "fallback"
                                         ? "Drafted locally"
-                                        : replyState.source === "agentrouter"
-                                        ? "Drafted by AgentRouter"
+                                        : replyState.source === "groq"
+                                        ? "Drafted by Groq"
+                                        : replyState.source === "openrouter"
+                                        ? "Drafted by OpenRouter"
                                         : "Generating draft"}
                                     </span>
                                     <span>
@@ -3365,7 +3367,7 @@ function showAlerts() {
 
                   <p className="muted">
                     View your Gmail conversations
-                    analyzed by AgentRouter AI.
+                    analyzed by Groq AI.
                   </p>
                 </div>
 
@@ -3570,9 +3572,9 @@ function showAlerts() {
                 </div>
               )}
 
-              {gmailError && gmailError.toLowerCase().includes("gemini") && (
+              {gmailError && /(groq|openrouter|provider|ai)/i.test(gmailError) && (
                 <div className="alert">
-                  <strong>AI analysis unavailable.</strong> Gemini is not responding — emails will sync but won't be analyzed until it's back.
+                  <strong>AI analysis unavailable.</strong> Groq/OpenRouter is not responding — emails will sync with local fallback analysis until it's back.
                 </div>
               )}
 
@@ -3769,7 +3771,7 @@ function showAlerts() {
                       <div className="spinner-green"></div>
                       <div>
                         <h3>Analyzing Gmail...</h3>
-                        <p>Gmail messages are being retrieved and analyzed by AgentRouter.</p>
+                        <p>Gmail messages are being retrieved and analyzed by Groq.</p>
                       </div>
                     </div>
                     {[1, 2, 3].map((i) => (
